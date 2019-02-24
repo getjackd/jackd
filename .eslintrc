@@ -1,0 +1,20 @@
+{
+  "extends": ["eslint:recommended"],
+  "parserOptions": {
+    "ecmaVersion": 8
+  },
+  "rules": {
+    "semi": ["error", "never"],
+    "no-console": ["off"],
+    "no-unused-vars": 1
+  },
+  "env": {
+    "browser": true,
+    "node": true,
+    "mocha": true
+  },
+  "globals": {
+    "Promise": true,
+    "verbose": true
+  }
+}
