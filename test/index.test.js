@@ -54,12 +54,12 @@ describe('jackd', function() {
 })
 
 function setupTestSuiteLifecycleWithClient() {
-  beforeEach(function() {
+  beforeEach(async function() {
     this.client = new JackdClient()
-    this.client.connect()
+    await this.client.connect()
   })
 
-  afterEach(function() {
-    this.client.close()
+  afterEach(async function() {
+    await this.client.close()
   })
 }
