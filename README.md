@@ -29,7 +29,7 @@ Most `beanstalkd` clients don't support promises (fivebeans, nodestalker) and th
 
 ## API
 
-The author of `beanstalkd` has a [good write-up of the `beanstalkd` protocol](https://github.com/beanstalkd/beanstalkd/blob/master/doc/protocol.txt), which makes it incredibly easy to development against. If you're unsure how `beanstalkd works, it may be worth reading the specs before the API docs.
+The author of `beanstalkd` has a [good write-up of the `beanstalkd` protocol](https://github.com/beanstalkd/beanstalkd/blob/master/doc/protocol.txt), which makes it incredibly easy to development against. If you're unsure how `beanstalkd` works, it may be worth reading the specs before the API docs.
 
 ### Overview
 
@@ -119,7 +119,7 @@ await beanstalkd.release(id)
 // You can also specify the priority and the delay
 await beanstalkd.release(id,
   priority: 10
-  delay: 1000
+  delay: 10
 })
 ```
 
@@ -169,7 +169,7 @@ You can also bring back the current tubes watched using `list-tubes-watched`. Ho
 
 To execute commands that return YAML, `jackd` exposes the `executeMultiPartCommand` function:
 
-```
+```js
 const stats = await beanstalkd.executeMultiPartCommand('stats\r\n')
 /* =>
 ---
@@ -183,7 +183,7 @@ current-jobs-buried: 0
 
 You can then pipe this result through a YAML parser to get the actual contents of the YAML file.
 
-```
+```js
 const YAML = require('yaml')
 const stats = await beanstalkd.executeMultiPartCommand('stats\r\n')
 const { 'total-jobs': totalJobs } = YAML.parse(stats)
