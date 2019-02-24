@@ -8,12 +8,6 @@ describe('jackd', function() {
     await c.close()
   })
 
-  after(async function() {
-    const client = new JackdClient()
-
-    client.connect()
-  })
-
   describe('handles errors', function() {
     setupTestSuiteLifecycleWithClient()
 

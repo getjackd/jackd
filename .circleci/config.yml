@@ -1,0 +1,36 @@
+version: 2
+base: &base
+  docker:
+    - image: dimiguel/circleci-node
+    - image: dimiguel/circleci-beanstalkd
+jobs:
+  build:
+    <<: *base
+    steps:
+      - checkout
+      - restore_cache:
+          keys:
+            - v5-{{ checksum "package-lock.json" }}
+      - run: npm install
+      - save_cache:
+          key: v5-{{ checksum "package-lock.json" }}
+          paths:
+            - /root/project
+      - persist_to_workspace:
+          root: /root/project
+          paths:
+            - ./*
+  test:
+    <<: *base
+    steps:
+      - attach_workspace:
+          at: /root/project
+      - run: npm test
+workflows:
+  version: 2
+  default:
+    jobs:
+      - build
+      - test:
+          requires:
+            - build
