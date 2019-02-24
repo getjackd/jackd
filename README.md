@@ -28,7 +28,8 @@ Most beanstalkd clients don't support promises (fivebeans, nodestalker) and the 
 
 ## Upcoming
 
-- [ ] Support for all commands
+- [x] First-class methods for all commands without YAML
+- [ ] Completed test suite
 - [ ] API documentation
 - [ ] Examples
 

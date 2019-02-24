@@ -7,6 +7,7 @@ const USING = 'USING'
 const TOUCHED = 'TOUCHED'
 const DELETED = 'DELETED'
 const BURIED = 'BURIED'
+const RELEASED = 'RELEASED'
 const NOT_FOUND = 'NOT_FOUND'
 const OUT_OF_MEMORY = 'OUT_OF_MEMORY'
 const INTERNAL_ERROR = 'INTERNAL_ERROR'
@@ -18,6 +19,10 @@ const DRAINING = 'DRAINING'
 const TIMED_OUT = 'TIMED_OUT'
 const DEADLINE_SOON = 'DEADLINE_SOON'
 const FOUND = 'FOUND'
+const WATCHING = 'WATCHING'
+const NOT_IGNORED = 'NOT_IGNORED'
+const KICKED = 'KICKED'
+const PAUSED = 'PAUSED'
 
 module.exports = {
   JackdClient
@@ -42,15 +47,8 @@ JackdClient.prototype.connect = async function() {
   }
 }
 
-JackdClient.prototype.close = JackdClient.prototype.disconnect = async function() {
-  const socket = this.socket
-
-  const closePromise = new Promise(resolve => {
-    socket.on('close', resolve)
-  })
-
-  socket.destroy()
-  await closePromise
+JackdClient.prototype.quit = JackdClient.prototype.close = JackdClient.prototype.disconnect = async function() {
+  await this.write('quit\r\n')
 }
 
 JackdClient.prototype.write = function(string) {
@@ -63,24 +61,22 @@ JackdClient.prototype.write = function(string) {
 
 JackdClient.prototype.executeCommand = createCommandHandler(
   command => command,
-  response => validateAgainstErrors(response)
-)
-
-JackdClient.prototype.reserve = createCommandHandler(
-  () => 'reserve\r\n',
   response => {
-    validateAgainstErrors(response, [DEADLINE_SOON, TIMED_OUT])
-
-    if (response.startsWith(RESERVED)) {
-      const [, id] = response.split(' ')
-      return function(deferredResponse) {
-        return { id, payload: deferredResponse }
-      }
-    }
-
-    return null
+    validateAgainstErrors(response)
+    return response
   }
 )
+
+JackdClient.prototype.pauseTube = createCommandHandler(
+  (tube, { delay } = {}) => `pause-tube ${tube} ${delay || 0}`,
+  response => {
+    validateAgainstErrors(response, [NOT_FOUND])
+    if (response === PAUSED) return
+    invalidResponse(response)
+  }
+)
+
+/* Producer commands */
 
 JackdClient.prototype.put = createCommandHandler(
   (payload, { priority, delay, ttr } = {}) => {
@@ -102,43 +98,152 @@ JackdClient.prototype.put = createCommandHandler(
       return id
     }
 
-    responseUnexpected(response)
+    invalidResponse(response)
   }
 )
+
+JackdClient.prototype.use = createCommandHandler(
+  tube => `use ${tube}\r\n`,
+  response => {
+    validateAgainstErrors(response)
+    if (response === USING) return
+    invalidResponse(response)
+  }
+)
+
+/* Consumer commands */
+
+JackdClient.prototype.reserve = createCommandHandler(
+  () => 'reserve\r\n',
+  reserveResponseHandler
+)
+
+JackdClient.prototype.reserveWithTimeout = createCommandHandler(
+  seconds => `reserve-with-timeout ${seconds}\r\n`,
+  reserveResponseHandler
+)
+
+function reserveResponseHandler(response) {
+  validateAgainstErrors(response, [DEADLINE_SOON, TIMED_OUT])
+
+  if (response.startsWith(RESERVED)) {
+    const [, id] = response.split(' ')
+    return function(deferredResponse) {
+      return { id, payload: deferredResponse }
+    }
+  }
+
+  invalidResponse(response)
+}
 
 JackdClient.prototype.delete = createCommandHandler(
   id => `delete ${id}\r\n`,
   response => {
     validateAgainstErrors(response, [NOT_FOUND])
-    if (response !== DELETED) responseUnexpected(response)
+    if (response === DELETED) return
+    invalidResponse(response)
   }
 )
 
-JackdClient.prototype.use = createCommandHandler()
-// JackdClient.prototype.use = async function(tube) {
-//   const handler = new Promise((resolve, reject) => {
-//     handleGenericErrors(responses, reject)
-//     responses.on(USING, resolve)
-//   })
+JackdClient.prototype.release = createCommandHandler(
+  (id, { priority, delay } = {}) =>
+    `release ${id} ${priority || 0} ${delay || 0}\r\n`,
+  response => {
+    validateAgainstErrors(response, [BURIED, NOT_FOUND])
+    if (response === RELEASED) return
+    invalidResponse(response)
+  }
+)
 
-//   await this.write(`use ${tube}\r\n`)
+JackdClient.prototype.bury = createCommandHandler(
+  (id, { priority } = {}) => `bury ${id} ${priority || 0}\r\n`,
+  response => {
+    validateAgainstErrors(response, [NOT_FOUND])
+    if (response === BURIED) return
+    invalidResponse(response)
+  }
+)
 
-//   return handler
-// }
+JackdClient.prototype.touch = createCommandHandler(
+  id => `touch ${id}\r\n`,
+  response => {
+    validateAgainstErrors(response, [NOT_FOUND])
+    if (response === TOUCHED) return
+    invalidResponse(response)
+  }
+)
 
-// JackdClient.prototype.bury = async function(id, priority) {
-//   const handler = new Promise((resolve, reject) => {
-//     handleGenericErrors(responses, reject)
-//     handleErrors(responses, [NOT_FOUND])
-//     responses.on(BURIED, resolve)
-//   })
+JackdClient.prototype.watch = createCommandHandler(
+  tube => `watch ${tube}\r\n`,
+  response => {
+    validateAgainstErrors(response)
+    if (response.startsWith(WATCHING)) {
+      const [, count] = response.split(' ')
+      return count
+    }
+    invalidResponse(response)
+  }
+)
 
-//   await this.write(`bury ${id} ${priority}\r\n`)
+JackdClient.prototype.ignore = createCommandHandler(
+  tube => `ignore ${tube}\r\n`,
+  response => {
+    validateAgainstErrors(response, [NOT_IGNORED])
+    if (response.startsWith(WATCHING)) {
+      const [, count] = response.split(' ')
+      return count
+    }
+    invalidResponse(response)
+  }
+)
 
-//   return handler
-// }
+/* Other commands */
 
-function responseUnexpected(response) {
+JackdClient.prototype.peek = createCommandHandler(
+  id => `peek ${id}\r\n`,
+  response => {
+    validateAgainstErrors(response, [NOT_FOUND])
+    if (response.startsWith(FOUND)) {
+      const [, id] = response.split(' ')
+      return function(deferredResponse) {
+        return { id, payload: deferredResponse }
+      }
+    }
+    invalidResponse(response)
+  }
+)
+
+JackdClient.prototype.kick = createCommandHandler(
+  bound => `kick ${bound}\r\n`,
+  response => {
+    validateAgainstErrors(response)
+    if (response === KICKED) return
+    invalidResponse(response)
+  }
+)
+
+JackdClient.prototype.kickJob = createCommandHandler(
+  id => `kick ${id}\r\n`,
+  response => {
+    validateAgainstErrors(response, [NOT_FOUND])
+    if (response === KICKED) return
+    invalidResponse(response)
+  }
+)
+
+JackdClient.prototype.getCurrentTube = createCommandHandler(
+  () => `list-tube-used\r\n`,
+  response => {
+    validateAgainstErrors(response, [NOT_FOUND])
+    if (response.startsWith(USING)) {
+      const [, tube] = response.split(' ')
+      return tube
+    }
+    invalidResponse(response)
+  }
+)
+
+function invalidResponse(response) {
   const error = new Error('unexpected-response')
   error.response = response
   throw error
