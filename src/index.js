@@ -27,8 +27,8 @@ const PAUSED = 'PAUSED'
 module.exports = JackdClient
 
 function JackdClient() {
-  const socket = (this.socket = new Socket())
-  socket.setEncoding('ascii')
+  this.socket = new Socket()
+  this.socket.setEncoding('ascii')
 }
 
 JackdClient.prototype.connect = async function() {
