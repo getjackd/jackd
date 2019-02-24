@@ -68,6 +68,16 @@ JackdClient.prototype.executeCommand = createCommandHandler(
   }
 )
 
+JackdClient.prototype.executeMultiPartCommand = createCommandHandler(
+  command => command,
+  response => {
+    validateAgainstErrors(response)
+    return function(deferredResponse) {
+      return deferredResponse
+    }
+  }
+)
+
 JackdClient.prototype.pauseTube = createCommandHandler(
   (tube, { delay } = {}) => `pause-tube ${tube} ${delay || 0}`,
   response => {
@@ -117,7 +127,10 @@ JackdClient.prototype.use = createCommandHandler(
   },
   response => {
     validateAgainstErrors(response)
-    if (response === USING) return
+    if (response.startsWith(USING)) {
+      const [, tube] = response.split(' ')
+      return tube
+    }
     invalidResponse(response)
   }
 )
@@ -212,7 +225,8 @@ JackdClient.prototype.watch = createCommandHandler(
 
 JackdClient.prototype.ignore = createCommandHandler(
   tube => {
-    assert(tube)`ignore ${tube}\r\n`
+    assert(tube)
+    return `ignore ${tube}\r\n`
   },
   response => {
     validateAgainstErrors(response, [NOT_IGNORED])

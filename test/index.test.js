@@ -1,5 +1,6 @@
 const { expect } = require('chai')
 const Jackd = require('../src')
+const YAML = require('yaml')
 
 describe('jackd', function() {
   it('can connect to and disconnect from beanstalkd', async function() {
@@ -49,6 +50,58 @@ describe('jackd', function() {
       expect(job.payload).to.equal('some random job')
 
       await this.client.delete(id)
+    })
+
+    it('can receive delayed jobs', async function() {
+      const id = await this.client.put('some random job', {
+        delay: 1
+      })
+
+      const job = await this.client.reserve()
+
+      expect(job.id).to.equal(id)
+      expect(job.payload).to.equal('some random job')
+
+      await this.client.delete(id)
+    })
+
+    it('can insert and process jobs on a different tube', async function() {
+      await this.client.use('some-other-tube')
+      const id = await this.client.put('some random job on another tube')
+
+      await this.client.watch('some-other-tube')
+      const job = await this.client.reserve()
+
+      expect(job.id).to.equal(id)
+      expect(job.payload).to.equal('some random job on another tube')
+
+      await this.client.delete(id)
+    })
+
+    it('will ignore jobs from default', async function() {
+      const defaultId = await this.client.put('job on default')
+      await this.client.use('some-other-tube')
+      const id = await this.client.put('some random job on another tube')
+
+      await this.client.watch('some-other-tube')
+      await this.client.ignore('default')
+
+      const job = await this.client.reserve()
+
+      expect(job.id).to.equal(id)
+      expect(job.payload).to.equal('some random job on another tube')
+
+      await this.client.delete(id)
+      await this.client.delete(defaultId)
+    })
+  })
+
+  describe('multi-part commands', function() {
+    setupTestSuiteLifecycleWithClient()
+
+    it('brings back stats', async function() {
+      const stats = await this.client.executeMultiPartCommand('stats\r\n')
+      YAML.parse(stats)
     })
   })
 })

@@ -44,8 +44,7 @@ const beanstalkd = new Jackd()
 await beanstalkd.connect() // Connects to localhost:11300
 await beanstalkd.connect({ host, port })
 
-await beanstalkd.disconnect()
-// You can also use beanstalkd.close; it's an alias
+await beanstalkd.disconnect() // You can also use beanstalkd.close; it's an alias
 ```
 
 ### Producers
@@ -72,9 +71,9 @@ All jobs sent to beanstalkd have a priority, a delay, and TTR (time-to-run) spec
 await beanstalkd.put(
   { foo: 'bar' },
   {
-    delay: 100,
+    delay: 2, // Two second delay
     priority: new Date().getTime(),
-    ttr: 600
+    ttr: 600 // Ten minute delay
   }
 )
 ```
@@ -86,7 +85,7 @@ Jobs with lower priorities are handled first. Refer to [the protocol specs](http
 All jobs are added to the `default` tube by default. You can change the tube you want to produce a job in by using `use`.
 
 ```js
-await beanstalkd.use('foo')
+const tubeName = await beanstalkd.use('awesome-tube') // => 'awesome-tube'
 await beanstalkd.put({ foo: 'bar' })
 ```
 
@@ -97,13 +96,13 @@ await beanstalkd.put({ foo: 'bar' })
 Consumers work by reserving jobs in a tube. Reserving is a blocking operation and execution will stop until a job has been reserved.
 
 ```js
-const { id, payload } = await beanstalkd.reserve()
+const { id, payload } = await beanstalkd.reserve() // wait until job incoming
 console.log({ id, payload }) // => { id: '1', payload: '{"foo":"bar"}' }
 ```
 
-`jackd` will return the payload as-is. This means you'll have to do `JSON.parse` yourself if you passed in an object.
+`jackd` will return the payload as-is. This means you'll have to do `JSON.parse` yourself if you passed in an `Object`.
 
-#### Performing job operations (delete/bury/touch)
+#### Performing job operations (delete/bury/touch/release)
 
 Once you've reserved a job, there are several operations you can perform on it. The most common operation will be deleting the job after the consumer is finished processing it.
 
@@ -111,7 +110,20 @@ Once you've reserved a job, there are several operations you can perform on it. 
 await beanstalkd.delete(id)
 ```
 
-However, you may want to bury the job to be processed later under certain conditions. Buried jobs will not be processed until they are kicked.
+Consumers can also give up their reservation by releasing the job. You'll usually want to release the job if an error occurred on the consumer and you want to put it back in the queue immediately.
+
+```js
+// Release immediately with high priority (0) and no delay (0)
+await beanstalkd.release(id)
+
+// You can also specify the priority and the delay
+await beanstalkd.release(id,
+  priority: 10
+  delay: 1000
+})
+```
+
+However, you may want to bury the job to be processed later under certain conditions, such as a recurring error or a job that can't be processed. Buried jobs will not be processed until they are kicked.
 
 ```js
 await beanstalkd.bury(id)
@@ -125,15 +137,65 @@ You'll notice that the kick operation is suffixed by `Job`. This is because ther
 await beanstalkd.kick(10) // 10 buried jobs will be moved to a ready state
 ```
 
-Sometimes, consumers will need additional time to run jobs. You can `touch` those jobs to let `beanstalkd` know you're still processing them.
+Consumers will sometimes need additional time to run jobs. You can `touch` those jobs to let `beanstalkd` know you're still processing them.
 
 ```js
 await beanstalkd.touch(id)
 ```
 
+#### Watching on multiple tubes
+
+By default, all consumers will watch the `default` tube only. So naturally consumers can elect what tubes they want to watch.
+
+```js
+const numberOfTubesWatched = await beanstalkd.watch('my-special-tube')
+// => 2
+```
+
+If a consumer is watching a tube and it no longer needs it, you can choose to ignore that tube as well.
+
+```js
+const numberOfTubesWatched = await beanstalkd.ignore('default')
+// => 1
+```
+
+Please keep in mind that attempting to ignore the only tube being watched will return an error.
+
+You can also bring back the current tubes watched using `list-tubes-watched`. However, there is no first-class support for this command because it returns YAML. This will be discussed in the next section.
+
+### Executing arbitrary commands
+
+`jackd` only has first-class support for commands that do not return YAML. This was an intentional design decision to allow the developer using `jackd` the flexibility to specify what YAML parser they want to use.
+
+To execute commands that return YAML, `jackd` exposes the `executeMultiPartCommand` function:
+
+```
+const stats = await beanstalkd.executeMultiPartCommand('stats\r\n')
+/* =>
+---
+current-jobs-urgent: 0
+current-jobs-ready: 0
+current-jobs-reserved: 0
+current-jobs-delayed: 0
+current-jobs-buried: 0
+*/
+```
+
+You can then pipe this result through a YAML parser to get the actual contents of the YAML file.
+
+```
+const YAML = require('yaml')
+const stats = await beanstalkd.executeMultiPartCommand('stats\r\n')
+const { 'total-jobs': totalJobs } = YAML.parse(stats)
+console.log(totalJobs)
+// => 0
+```
+
+There is also an `executeCommand` method which will allow you to execute arbitary commands on `beanstalkd`. Please keep in mind that support for this use-case is limited.
+
 ## Upcoming
 
-- [x] First-class methods for all commands without YAML
+- [x] First-class methods for all non-YAML commands
 - [ ] Worker pattern support
 - [ ] Completed test suite
 - [ ] API documentation
