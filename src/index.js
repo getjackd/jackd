@@ -24,9 +24,7 @@ const NOT_IGNORED = 'NOT_IGNORED'
 const KICKED = 'KICKED'
 const PAUSED = 'PAUSED'
 
-module.exports = {
-  JackdClient
-}
+module.exports = JackdClient
 
 function JackdClient() {
   const socket = (this.socket = new Socket())
@@ -35,16 +33,19 @@ function JackdClient() {
 
 JackdClient.prototype.connect = async function() {
   const socket = this.socket
+  let host, port
 
-  const connectionPromise = new Promise(resolve => {
-    socket.on('connect', resolve)
-  })
-
-  if (!arguments.length) {
-    socket.connect(11300)
-    await connectionPromise
-    return this
+  if (arguments.length === 1) {
+    const [opts] = arguments
+    host = opts.host
+    port = opts.port
   }
+
+  await new Promise(resolve =>
+    socket.connect(port || 11300, host || undefined, resolve)
+  )
+
+  return this
 }
 
 JackdClient.prototype.quit = JackdClient.prototype.close = JackdClient.prototype.disconnect = async function() {
@@ -80,8 +81,15 @@ JackdClient.prototype.pauseTube = createCommandHandler(
 
 JackdClient.prototype.put = createCommandHandler(
   (payload, { priority, delay, ttr } = {}) => {
-    const body = Buffer.from(payload, 'ascii')
-    return `put ${priority || 0} ${delay || 0} ${ttr || 10} ${
+    assert(payload)
+    let string = payload
+
+    if (typeof payload === 'object') {
+      string = JSON.stringify(payload)
+    }
+
+    const body = Buffer.from(string, 'ascii')
+    return `put ${priority || 0} ${delay || 0} ${ttr || 60} ${
       body.length
     }\r\n${payload}\r\n`
   },
@@ -103,7 +111,10 @@ JackdClient.prototype.put = createCommandHandler(
 )
 
 JackdClient.prototype.use = createCommandHandler(
-  tube => `use ${tube}\r\n`,
+  tube => {
+    assert(tube)
+    return `use ${tube}\r\n`
+  },
   response => {
     validateAgainstErrors(response)
     if (response === USING) return
@@ -137,7 +148,10 @@ function reserveResponseHandler(response) {
 }
 
 JackdClient.prototype.delete = createCommandHandler(
-  id => `delete ${id}\r\n`,
+  id => {
+    assert(id)
+    return `delete ${id}\r\n`
+  },
   response => {
     validateAgainstErrors(response, [NOT_FOUND])
     if (response === DELETED) return
@@ -146,8 +160,10 @@ JackdClient.prototype.delete = createCommandHandler(
 )
 
 JackdClient.prototype.release = createCommandHandler(
-  (id, { priority, delay } = {}) =>
-    `release ${id} ${priority || 0} ${delay || 0}\r\n`,
+  (id, { priority, delay } = {}) => {
+    assert(id)
+    return `release ${id} ${priority || 0} ${delay || 0}\r\n`
+  },
   response => {
     validateAgainstErrors(response, [BURIED, NOT_FOUND])
     if (response === RELEASED) return
@@ -156,7 +172,10 @@ JackdClient.prototype.release = createCommandHandler(
 )
 
 JackdClient.prototype.bury = createCommandHandler(
-  (id, { priority } = {}) => `bury ${id} ${priority || 0}\r\n`,
+  (id, { priority } = {}) => {
+    assert(id)
+    return `bury ${id} ${priority || 0}\r\n`
+  },
   response => {
     validateAgainstErrors(response, [NOT_FOUND])
     if (response === BURIED) return
@@ -165,7 +184,10 @@ JackdClient.prototype.bury = createCommandHandler(
 )
 
 JackdClient.prototype.touch = createCommandHandler(
-  id => `touch ${id}\r\n`,
+  id => {
+    assert(id)
+    return `touch ${id}\r\n`
+  },
   response => {
     validateAgainstErrors(response, [NOT_FOUND])
     if (response === TOUCHED) return
@@ -174,7 +196,10 @@ JackdClient.prototype.touch = createCommandHandler(
 )
 
 JackdClient.prototype.watch = createCommandHandler(
-  tube => `watch ${tube}\r\n`,
+  tube => {
+    assert(tube)
+    return `watch ${tube}\r\n`
+  },
   response => {
     validateAgainstErrors(response)
     if (response.startsWith(WATCHING)) {
@@ -186,7 +211,9 @@ JackdClient.prototype.watch = createCommandHandler(
 )
 
 JackdClient.prototype.ignore = createCommandHandler(
-  tube => `ignore ${tube}\r\n`,
+  tube => {
+    assert(tube)`ignore ${tube}\r\n`
+  },
   response => {
     validateAgainstErrors(response, [NOT_IGNORED])
     if (response.startsWith(WATCHING)) {
@@ -200,7 +227,10 @@ JackdClient.prototype.ignore = createCommandHandler(
 /* Other commands */
 
 JackdClient.prototype.peek = createCommandHandler(
-  id => `peek ${id}\r\n`,
+  id => {
+    assert(id)
+    return `peek ${id}\r\n`
+  },
   response => {
     validateAgainstErrors(response, [NOT_FOUND])
     if (response.startsWith(FOUND)) {
@@ -214,7 +244,10 @@ JackdClient.prototype.peek = createCommandHandler(
 )
 
 JackdClient.prototype.kick = createCommandHandler(
-  bound => `kick ${bound}\r\n`,
+  bound => {
+    assert(bound)
+    return `kick ${bound}\r\n`
+  },
   response => {
     validateAgainstErrors(response)
     if (response === KICKED) return
@@ -223,7 +256,10 @@ JackdClient.prototype.kick = createCommandHandler(
 )
 
 JackdClient.prototype.kickJob = createCommandHandler(
-  id => `kick ${id}\r\n`,
+  id => {
+    assert(id)
+    return `kick-job ${id}\r\n`
+  },
   response => {
     validateAgainstErrors(response, [NOT_FOUND])
     if (response === KICKED) return

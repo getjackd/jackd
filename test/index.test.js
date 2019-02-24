@@ -1,9 +1,9 @@
 const { expect } = require('chai')
-const { JackdClient } = require('../src')
+const Jackd = require('../src')
 
 describe('jackd', function() {
   it('can connect to and disconnect from beanstalkd', async function() {
-    const c = new JackdClient()
+    const c = new Jackd()
     await c.connect()
     await c.close()
   })
@@ -55,7 +55,7 @@ describe('jackd', function() {
 
 function setupTestSuiteLifecycleWithClient() {
   beforeEach(async function() {
-    this.client = new JackdClient()
+    this.client = new Jackd()
     await this.client.connect()
   })
 
