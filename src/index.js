@@ -316,20 +316,20 @@ function createCommandHandler(commandFunction, responseFunction) {
           const delimiterIndex = buffer.indexOf('\r\n')
           const isLine = delimiterIndex > -1
 
-          if (isLine) {
-            const head = buffer.substring(0, delimiterIndex)
-            const tail = buffer.substring(delimiterIndex + 2, buffer.length)
+          if (!isLine) return
 
-            buffer = ''
-            let result = (responseFunctionOverride || responseFunction)(head)
+          const head = buffer.substring(0, delimiterIndex)
+          const tail = buffer.substring(delimiterIndex + 2, buffer.length)
 
-            if (typeof result === 'function' && tail.length) {
-              return processIncomingData(tail, result)
-            }
+          buffer = ''
+          let result = (responseFunctionOverride || responseFunction)(head)
 
-            socket.removeListener('data', processIncomingData)
-            resolve(result)
+          if (typeof result === 'function' && tail.length) {
+            return processIncomingData(tail, result)
           }
+
+          socket.removeListener('data', processIncomingData)
+          resolve(result)
         } catch (err) {
           socket.removeListener('data', processIncomingData)
           reject(err)
