@@ -2,18 +2,18 @@
 
 [![Build Status](https://img.shields.io/circleci/project/github/divmgl/jackd/master.svg)](https://circleci.com/gh/divmgl/jackd/tree/master)
 
-**This project is currently WIP. Do not use until version 1**.
-
 ```js
 /* producer.js */
 const Jackd = require('jackd')
 const beanstalkd = new Jackd()
 
-await beanstalkd.put('Hello world!')
+await beanstalkd.put('Hello!')
 
 /* consumer.js */
-const job = await beanstalkd.reserve()
-// => { id: '1', payload: 'Hello world!' }
+const Jackd = require('jackd')
+const beanstalkd = new Jackd()
+
+const job = await beanstalkd.reserve() // => { id: '1', payload: 'Hello!' }
 
 // ...process the job... then:
 await beanstalkd.delete(job.id)
@@ -196,10 +196,9 @@ There is also an `executeCommand` method which will allow you to execute arbitar
 ## Upcoming
 
 - [x] First-class methods for all non-YAML commands
+- [x] Completed test suite
+- [x] API documentation
 - [ ] Worker pattern support
-- [ ] Completed test suite
-- [ ] API documentation
-- [ ] Examples
 
 ## License
 
