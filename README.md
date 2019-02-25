@@ -193,12 +193,33 @@ console.log(totalJobs)
 
 There is also an `executeCommand` method which will allow you to execute arbitary commands on `beanstalkd`. Please keep in mind that support for this use-case is limited.
 
-## Upcoming
+## Worker pattern
 
-- [x] First-class methods for all non-YAML commands
-- [x] Completed test suite
-- [x] API documentation
-- [ ] Worker pattern support
+You may be looking to design a process that does nothing else but consume jobs. You can accomplish this with one `jackd` client using `async/await`. Here's an example implementation.
+
+```js
+/* consumer.js */
+const Jackd = require('jackd')
+const beanstalkd = new Jackd()
+const EventEmitter = require('events')
+
+const events = (module.exports = new EventEmitter())
+events.on('exit', () => process.exit(0))
+
+const beanstalkd = new Jackd()
+beanstalkd.connect()
+
+while (true) {
+  try {
+    const { id, payload } = await beanstalkd.reserve()
+    /* ... process job here ... */
+    await beanstalkd.delete(id)
+  } catch (err) {
+    // Log error somehow
+    console.error(err)
+  }
+}
+```
 
 ## License
 
