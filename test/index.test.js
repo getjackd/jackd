@@ -33,7 +33,7 @@ describe('jackd', function() {
     })
   })
 
-  describe('jobs', function() {
+  describe('producers', function() {
     setupTestSuiteLifecycleWithClient()
 
     it('can insert jobs', async function() {
@@ -41,6 +41,20 @@ describe('jackd', function() {
       expect(id).to.be.ok
       await this.client.delete(id)
     })
+
+    it('can insert jobs witih objects', async function() {
+      const id = await this.client.put({ foo: 'bar' })
+      expect(id).to.be.ok
+
+      const job = await this.client.reserve()
+      expect(job.payload).to.equal('{"foo":"bar"}')
+
+      await this.client.delete(id)
+    })
+  })
+
+  describe('consumers', function() {
+    setupTestSuiteLifecycleWithClient()
 
     it('can receive jobs', async function() {
       const id = await this.client.put('some random job')

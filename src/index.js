@@ -101,7 +101,7 @@ JackdClient.prototype.put = createCommandHandler(
     const body = Buffer.from(string, 'ascii')
     return `put ${priority || 0} ${delay || 0} ${ttr || 60} ${
       body.length
-    }\r\n${payload}\r\n`
+    }\r\n${string}\r\n`
   },
   response => {
     validateAgainstErrors(response, [
@@ -340,13 +340,7 @@ function createCommandHandler(commandFunction, responseFunction) {
 }
 
 function validateAgainstErrors(response, additionalErrors = []) {
-  const errors = [
-    OUT_OF_MEMORY,
-    INTERNAL_ERROR,
-    BAD_FORMAT,
-    TIMED_OUT,
-    UNKNOWN_COMMAND
-  ]
+  const errors = [OUT_OF_MEMORY, INTERNAL_ERROR, BAD_FORMAT, UNKNOWN_COMMAND]
 
   if (errors.concat(additionalErrors).some(error => response.startsWith(error)))
     throw new Error(response)
