@@ -201,12 +201,7 @@ You may be looking to design a process that does nothing else but consume jobs. 
 /* consumer.js */
 const Jackd = require('jackd')
 const beanstalkd = new Jackd()
-const EventEmitter = require('events')
 
-const events = (module.exports = new EventEmitter())
-events.on('exit', () => process.exit(0))
-
-const beanstalkd = new Jackd()
 beanstalkd.connect()
 
 while (true) {
