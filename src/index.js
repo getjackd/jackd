@@ -1,5 +1,6 @@
 const { Socket } = require('net')
 const assert = require('assert')
+const EventEmitter = require('events')
 
 const RESERVED = 'RESERVED'
 const INSERTED = 'INSERTED'
@@ -45,6 +46,27 @@ JackdClient.prototype.connect = async function() {
     socket.connect(port || 11300, host || undefined, resolve)
   )
 
+  this.pending = []
+
+  socket.on('data', async response => {
+    const chunks = response.split('\r\n')
+
+    while (chunks.length) {
+      const chunk = chunks.shift()
+      if (!chunk) continue
+
+      const { emitter, multipart } = this.pending.shift() || {}
+
+      if (!emitter) {
+        return
+      } else if (multipart && chunks.length > 1) {
+        emitter.emit('response', `${chunk}\r\n${chunks.shift()}\r\n`)
+      } else {
+        emitter.emit('response', `${chunk}\r\n`)
+      }
+    }
+  })
+
   return this
 }
 
@@ -75,7 +97,8 @@ JackdClient.prototype.executeMultiPartCommand = createCommandHandler(
     return function(deferredResponse) {
       return deferredResponse
     }
-  }
+  },
+  true
 )
 
 JackdClient.prototype.pauseTube = createCommandHandler(
@@ -139,12 +162,14 @@ JackdClient.prototype.use = createCommandHandler(
 
 JackdClient.prototype.reserve = createCommandHandler(
   () => 'reserve\r\n',
-  reserveResponseHandler
+  reserveResponseHandler,
+  true
 )
 
 JackdClient.prototype.reserveWithTimeout = createCommandHandler(
   seconds => `reserve-with-timeout ${seconds}\r\n`,
-  reserveResponseHandler
+  reserveResponseHandler,
+  true
 )
 
 function reserveResponseHandler(response) {
@@ -254,7 +279,8 @@ JackdClient.prototype.peek = createCommandHandler(
       }
     }
     invalidResponse(response)
-  }
+  },
+  true
 )
 
 JackdClient.prototype.kick = createCommandHandler(
@@ -294,20 +320,27 @@ JackdClient.prototype.getCurrentTube = createCommandHandler(
 )
 
 function invalidResponse(response) {
-  const error = new Error('unexpected-response')
+  const error = new Error(`Unexpected response: ${response}`)
   error.response = response
   throw error
 }
 
-function createCommandHandler(commandFunction, responseFunction) {
+function createCommandHandler(commandFunction, responseFunction, multipart) {
   return async function command() {
-    const socket = this.socket
     let buffer = ''
 
-    await this.write(commandFunction.apply(this, arguments))
+    const command = commandFunction.apply(this, arguments)
+    await this.write(command)
 
-    return new Promise((resolve, reject) => {
-      socket.on('data', processIncomingData)
+    const emitter = new EventEmitter()
+    this.pending.push({
+      command,
+      multipart,
+      emitter
+    })
+
+    return await new Promise((resolve, reject) => {
+      emitter.on('response', processIncomingData)
 
       function processIncomingData(chunk, responseFunctionOverride) {
         try {
@@ -324,14 +357,14 @@ function createCommandHandler(commandFunction, responseFunction) {
           buffer = ''
           let result = (responseFunctionOverride || responseFunction)(head)
 
-          if (typeof result === 'function' && tail.length) {
+          if (multipart && tail.length) {
             return processIncomingData(tail, result)
           }
 
-          socket.removeListener('data', processIncomingData)
+          emitter.removeListener('data', processIncomingData)
           resolve(result)
         } catch (err) {
-          socket.removeListener('data', processIncomingData)
+          emitter.removeListener('data', processIncomingData)
           reject(err)
         }
       }

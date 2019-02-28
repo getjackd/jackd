@@ -216,25 +216,11 @@ while (true) {
 }
 ```
 
-## Things to watch out for
+If you need to both publish and consume messages within the same Node.js process you may find it useful to create two connections to `beanstalkd` using `jackd`. While performing `beanstalkd` push/pull operations are supported on a single client, opening two clients will give you the following benefits:
 
-Communication with `beanstalkd` is strictly request/reply by nature. This means that you should ensure that you are waiting on all promises made through `jackd`. If `jackd` receives a response that it's not expecting, it will throw an exception.
-
-Here's a common example:
-
-```js
-beanstalkd.reserve() // No await, promise has started
-await beanstalkd.put({ foo: 'bar' })
-// => (node:56900) Error: unexpected-response
-```
-
-The response received by `put` here is `RESERVED 13 13`. As `RESERVED` is not a valid response for the `put` command, `jackd` throws an exception.
-
-In general, make sure to:
-
-- Make sure to `await` on all `jackd` methods that return promises (all of them)
-- Wrap all of your `async/await` code in `try/catch` blocks so that your promises don't fail silently
-- If you need to both publish and consume messages, open two connections instead of one. That way you can keep traffic flowing in one direction at all times
+- Likelihood of asynchronicity bugs is diminished (`beanstalkd` is synchronous in nature while Node.js is not)
+- Data will flow in one direction per client. One client will only `put`, the other will only `reserve/delete`.
+- Similarly, you'll have less tube confusion as you'll only need to `use` on one client and `watch/ignore` on the other.
 
 ## License
 
