@@ -42,7 +42,7 @@ describe('jackd', function() {
       await this.client.delete(id)
     })
 
-    it('can insert jobs witih objects', async function() {
+    it('can insert jobs with objects', async function() {
       const id = await this.client.put({ foo: 'bar' })
       expect(id).to.be.ok
 
@@ -107,6 +107,20 @@ describe('jackd', function() {
 
       await this.client.delete(id)
       await this.client.delete(defaultId)
+    })
+
+    it('handles multiple promises fired at once', async function() {
+      this.client.use('some-tube')
+      const firstJobPromise = this.client.put('some-job')
+      this.client.watch('some-random-tube')
+      this.client.use('some-another-tube')
+      const secondJobPromise = this.client.put('some-job')
+
+      const id1 = await firstJobPromise
+      const id2 = await secondJobPromise
+
+      await this.client.delete(id1)
+      await this.client.delete(id2)
     })
   })
 
