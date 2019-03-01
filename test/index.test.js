@@ -52,7 +52,7 @@ describe('jackd', function() {
       await this.client.delete(id)
     })
 
-    it.only('can insert jobs with priority', async function() {
+    it('can insert jobs with priority', async function() {
       const id = await this.client.put({ foo: 'bar' }, { priority: 12342342 })
       expect(id).to.be.ok
 
