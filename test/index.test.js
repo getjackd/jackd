@@ -51,6 +51,16 @@ describe('jackd', function() {
 
       await this.client.delete(id)
     })
+
+    it.only('can insert jobs with priority', async function() {
+      const id = await this.client.put({ foo: 'bar' }, { priority: 12342342 })
+      expect(id).to.be.ok
+
+      const job = await this.client.reserve()
+      await this.client.delete(id)
+
+      expect(job.payload).to.equal('{"foo":"bar"}')
+    })
   })
 
   describe('consumers', function() {

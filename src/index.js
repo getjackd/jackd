@@ -290,7 +290,7 @@ JackdClient.prototype.kick = createCommandHandler(
   },
   response => {
     validateAgainstErrors(response)
-    if (response === KICKED) return
+    if (response.startsWith(KICKED)) return
     invalidResponse(response)
   }
 )
@@ -302,7 +302,7 @@ JackdClient.prototype.kickJob = createCommandHandler(
   },
   response => {
     validateAgainstErrors(response, [NOT_FOUND])
-    if (response === KICKED) return
+    if (response.startsWith(KICKED)) return
     invalidResponse(response)
   }
 )
