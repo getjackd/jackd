@@ -24,17 +24,59 @@ const WATCHING = 'WATCHING'
 const NOT_IGNORED = 'NOT_IGNORED'
 const KICKED = 'KICKED'
 const PAUSED = 'PAUSED'
+const SOCKET_EVENTS = ['connect', 'close', 'error', 'ready'];
 
 module.exports = JackdClient
 
 function JackdClient() {
   this.socket = new Socket()
   this.socket.setEncoding('ascii')
+  this.connected = false
+
+  this.socket.on('ready', () => {
+    this.connected = true
+  })
+
+  this.socket.on('close', () => {
+    this.connected = false
+  })
+}
+
+/**
+ * Useful check for environments where network partitioning is common.
+ * @returns {boolean}
+ */
+JackdClient.prototype.isConnected = function() {
+  return this.connected;
+}
+
+/**
+ * Support event listeners on the underlying socket to support external
+ * reconnection logic.
+ * @param event
+ * @param listener
+ */
+JackdClient.prototype.on = function(event, listener) {
+  if (SOCKET_EVENTS.includes(event)) {
+    this.socket.on(event, listener);
+  }
+}
+
+/**
+ * Support one-time event listeners on the underlying socket to support
+ * external reconnection logic.
+ * @param event
+ * @param listener
+ */
+JackdClient.prototype.once = function(event, listener) {
+    if (SOCKET_EVENTS.includes(event)) {
+        this.socket.once(event, listener);
+    }
 }
 
 JackdClient.prototype.connect = async function() {
   const socket = this.socket
-  let host, port
+  let host = undefined, port = 11300
 
   if (arguments.length === 1) {
     const [opts] = arguments
@@ -42,9 +84,16 @@ JackdClient.prototype.connect = async function() {
     port = opts.port
   }
 
-  await new Promise(resolve =>
-    socket.connect(port || 11300, host || undefined, resolve)
-  )
+  await new Promise((resolve, reject) => {
+      socket.once('error', (error) => {
+        if (error.code === 'EISCONN') {
+          return resolve();
+        }
+        reject(error)
+      })
+
+      socket.connect(port, host, resolve)
+  })
 
   this.pending = []
 
@@ -269,6 +318,23 @@ JackdClient.prototype.peek = createCommandHandler(
   id => {
     assert(id)
     return `peek ${id}\r\n`
+  },
+  response => {
+    validateAgainstErrors(response, [NOT_FOUND])
+    if (response.startsWith(FOUND)) {
+      const [, id] = response.split(' ')
+      return function(deferredResponse) {
+        return { id, payload: deferredResponse }
+      }
+    }
+    invalidResponse(response)
+  },
+  true
+)
+
+JackdClient.prototype.peekBuried = createCommandHandler(
+  () => {
+    return `peek-buried\r\n`
   },
   response => {
     validateAgainstErrors(response, [NOT_FOUND])
