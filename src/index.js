@@ -24,7 +24,7 @@ const WATCHING = 'WATCHING'
 const NOT_IGNORED = 'NOT_IGNORED'
 const KICKED = 'KICKED'
 const PAUSED = 'PAUSED'
-const SOCKET_EVENTS = ['connect', 'close', 'error', 'ready'];
+const SOCKET_EVENTS = ['connect', 'close', 'error', 'ready']
 
 module.exports = JackdClient
 
@@ -47,7 +47,7 @@ function JackdClient() {
  * @returns {boolean}
  */
 JackdClient.prototype.isConnected = function() {
-  return this.connected;
+  return this.connected
 }
 
 /**
@@ -58,7 +58,7 @@ JackdClient.prototype.isConnected = function() {
  */
 JackdClient.prototype.on = function(event, listener) {
   if (SOCKET_EVENTS.includes(event)) {
-    this.socket.on(event, listener);
+    this.socket.on(event, listener)
   }
 }
 
@@ -69,14 +69,15 @@ JackdClient.prototype.on = function(event, listener) {
  * @param listener
  */
 JackdClient.prototype.once = function(event, listener) {
-    if (SOCKET_EVENTS.includes(event)) {
-        this.socket.once(event, listener);
-    }
+  if (SOCKET_EVENTS.includes(event)) {
+    this.socket.once(event, listener)
+  }
 }
 
 JackdClient.prototype.connect = async function() {
   const socket = this.socket
-  let host = undefined, port = 11300
+  let host = undefined,
+    port = 11300
 
   if (arguments.length === 1) {
     const [opts] = arguments
@@ -85,14 +86,14 @@ JackdClient.prototype.connect = async function() {
   }
 
   await new Promise((resolve, reject) => {
-      socket.once('error', (error) => {
-        if (error.code === 'EISCONN') {
-          return resolve();
-        }
-        reject(error)
-      })
+    socket.once('error', error => {
+      if (error.code === 'EISCONN') {
+        return resolve()
+      }
+      reject(error)
+    })
 
-      socket.connect(port, host, resolve)
+    socket.connect(port, host, resolve)
   })
 
   this.pending = []
