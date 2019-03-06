@@ -37,9 +37,9 @@ declare namespace JackdClient {
   }
 
   export interface PutOptions {
-    delay: number
-    priority: number
-    ttr: number
+    delay?: number
+    priority?: number
+    ttr?: number
   }
 
   export interface Job {
@@ -48,7 +48,7 @@ declare namespace JackdClient {
   }
 
   export interface ReleaseOptions {
-    priority: number
-    delay: number
+    priority?: number
+    delay?: number
   }
 }
