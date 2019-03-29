@@ -9,6 +9,19 @@ describe('jackd', function() {
     await c.close()
   })
 
+  describe('connectivity', function() {
+    setupTestSuiteLifecycleWithClient()
+
+    it('connected', function() {
+      expect(this.client.connected).to.be.ok
+    })
+
+    it('disconnected', async function() {
+      await this.client.disconnect()
+      expect(this.client.ocnnected).to.not.be.ok
+    })
+  })
+
   describe('handles errors', function() {
     setupTestSuiteLifecycleWithClient()
 
@@ -141,7 +154,20 @@ describe('jackd', function() {
 
       expect(job.id).to.equal(id)
       expect(job.payload).to.equal(hugeText)
+    })
 
+    it('can peek buried jobs', async function() {
+      await this.client.use('some-tube')
+      
+      const id = await this.client.put('some-job')
+      
+      await this.client.watch('some-tube')
+      await this.client.reserve()
+      await this.client.bury(id)
+
+      const job = await this.client.peekBuried()
+
+      expect(job.id).to.equal(id)
       await this.client.delete(id)
     })
   })
