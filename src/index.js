@@ -97,8 +97,15 @@ JackdClient.prototype.connect = async function() {
 
   this.pending = []
 
+  let dataBuffer = ''
+
   socket.on('data', async response => {
-    const chunks = response.split('\r\n')
+    if (!response.endsWith('\r\n')) {
+      dataBuffer += response
+      return
+    }
+    const chunks = (dataBuffer + response).split('\r\n')
+    dataBuffer = ''
 
     while (chunks.length) {
       const chunk = chunks.shift()
