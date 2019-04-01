@@ -146,6 +146,16 @@ describe('jackd', function() {
       await this.client.delete(id2)
     })
 
+    it('can receive huge jobs', async function() {
+      // job larger than a socket data frame
+      const hugeText = new Array(100000).join('a');
+      const id = await this.client.put(hugeText)
+      const job = await this.client.reserve()
+
+      expect(job.id).to.equal(id)
+      expect(job.payload).to.equal(hugeText)
+    })
+
     it('can peek buried jobs', async function() {
       await this.client.use('some-tube')
       
