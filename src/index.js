@@ -137,7 +137,7 @@ JackdClient.prototype.connect = async function() {
       await handler(head)
     }
 
-    await receiveChunk(tail, pendingCommandResult)
+    return await receiveChunk(tail, pendingCommandResult)
   }
 
   return this

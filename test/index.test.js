@@ -148,7 +148,7 @@ describe('jackd', function() {
 
     it('can receive huge jobs', async function() {
       // job larger than a socket data frame
-      const hugeText = new Array(10000).join('a')
+      const hugeText = new Array(50000).join('a')
       const id = await this.client.put(hugeText)
       const job = await this.client.reserve()
 
