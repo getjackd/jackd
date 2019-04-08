@@ -101,11 +101,7 @@ JackdClient.prototype.connect = async function() {
   let buffer = ''
   let pendingCommandResult = ''
 
-  socket.on('data', response => {
-    receiveChunk(response)
-  })
-
-  const receiveChunk = async response => {
+  socket.on('data', async response => {
     buffer += response
 
     while (buffer) {
@@ -139,7 +135,7 @@ JackdClient.prototype.connect = async function() {
 
       buffer = tail
     }
-  }
+  })
 
   return this
 }
