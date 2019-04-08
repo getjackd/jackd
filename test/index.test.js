@@ -148,19 +148,21 @@ describe('jackd', function() {
 
     it('can receive huge jobs', async function() {
       // job larger than a socket data frame
-      const hugeText = new Array(100000).join('a');
+      const hugeText = new Array(50000).join('a')
       const id = await this.client.put(hugeText)
       const job = await this.client.reserve()
 
       expect(job.id).to.equal(id)
       expect(job.payload).to.equal(hugeText)
+
+      await this.client.delete(id)
     })
 
     it('can peek buried jobs', async function() {
       await this.client.use('some-tube')
-      
+
       const id = await this.client.put('some-job')
-      
+
       await this.client.watch('some-tube')
       await this.client.reserve()
       await this.client.bury(id)
