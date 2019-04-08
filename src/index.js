@@ -98,31 +98,47 @@ JackdClient.prototype.connect = async function() {
 
   this.pending = []
 
-  let dataBuffer = ''
+  let buffer = ''
 
-  socket.on('data', async response => {
-    if (!response.endsWith('\r\n')) {
-      dataBuffer += response
+  socket.on('data', response => {
+    receiveChunk(response)
+  })
+
+  const receiveChunk = async (response, pendingCommandResult) => {
+    if (!response) return
+
+    buffer = response
+
+    const index = buffer.indexOf('\r\n')
+    const containsCommand = index > -1
+
+    let head, tail
+
+    if (containsCommand) {
+      head = buffer.substring(0, index)
+      tail = buffer.substring(index + 2, buffer.length)
+    } else {
+      await receiveChunk(response)
       return
     }
-    const chunks = (dataBuffer + response).split('\r\n')
-    dataBuffer = ''
 
-    while (chunks.length) {
-      const chunk = chunks.shift()
-      if (!chunk) continue
+    const { handler, multipart } = this.pending[0] || {}
 
-      const { emitter, multipart } = this.pending.shift() || {}
-
-      if (!emitter) {
-        return
-      } else if (multipart && chunks.length > 1) {
-        emitter.emit('response', `${chunk}\r\n${chunks.shift()}\r\n`)
-      } else {
-        emitter.emit('response', `${chunk}\r\n`)
-      }
+    if (handler && containsCommand && multipart && !pendingCommandResult) {
+      pendingCommandResult = head
+    } else if (
+      handler &&
+      containsCommand &&
+      multipart &&
+      pendingCommandResult
+    ) {
+      await handler(pendingCommandResult + '\r\n' + head)
+    } else if (handler && containsCommand) {
+      await handler(head)
     }
-  })
+
+    await receiveChunk(tail, pendingCommandResult)
+  }
 
   return this
 }
@@ -401,47 +417,37 @@ function invalidResponse(response) {
 
 function createCommandHandler(commandFunction, responseFunction, multipart) {
   return async function command() {
-    let buffer = ''
-
     const command = commandFunction.apply(this, arguments)
     await this.write(command)
 
     const emitter = new EventEmitter()
+
     this.pending.push({
       command,
       multipart,
-      emitter
+      handler: async chunk => {
+        try {
+          let result
+
+          if (multipart) {
+            const [head, tail] = chunk.split('\r\n')
+            result = responseFunction(head)(tail)
+          } else {
+            result = responseFunction(chunk.replace('\r\n', ''))
+          }
+
+          emitter.emit('resolve', result)
+        } catch (err) {
+          emitter.emit('reject', err)
+        } finally {
+          this.pending.shift()
+        }
+      }
     })
 
     return await new Promise((resolve, reject) => {
-      emitter.on('response', processIncomingData)
-
-      function processIncomingData(chunk, responseFunctionOverride) {
-        try {
-          buffer += chunk
-
-          const delimiterIndex = buffer.indexOf('\r\n')
-          const isLine = delimiterIndex > -1
-
-          if (!isLine) return
-
-          const head = buffer.substring(0, delimiterIndex)
-          const tail = buffer.substring(delimiterIndex + 2, buffer.length)
-
-          buffer = ''
-          let result = (responseFunctionOverride || responseFunction)(head)
-
-          if (multipart && tail.length) {
-            return processIncomingData(tail, result)
-          }
-
-          emitter.removeListener('data', processIncomingData)
-          resolve(result)
-        } catch (err) {
-          emitter.removeListener('data', processIncomingData)
-          reject(err)
-        }
-      }
+      emitter.once('resolve', resolve)
+      emitter.once('reject', reject)
     })
   }
 }

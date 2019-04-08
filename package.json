@@ -4,7 +4,7 @@
   "description": "Modern beanstalkd client for Node.js",
   "main": "src/index.js",
   "scripts": {
-    "test": "mocha"
+    "test": "mocha --bail"
   },
   "repository": {
     "type": "git",
