@@ -99,45 +99,46 @@ JackdClient.prototype.connect = async function() {
   this.pending = []
 
   let buffer = ''
+  let pendingCommandResult = ''
 
   socket.on('data', response => {
     receiveChunk(response)
   })
 
-  const receiveChunk = async (response, pendingCommandResult) => {
-    if (!response) return
+  const receiveChunk = async response => {
+    buffer += response
 
-    buffer = response
+    while (buffer) {
+      const index = buffer.indexOf('\r\n')
+      const containsCommand = index > -1
 
-    const index = buffer.indexOf('\r\n')
-    const containsCommand = index > -1
+      let head, tail
 
-    let head, tail
+      if (containsCommand) {
+        head = buffer.substring(0, index)
+        tail = buffer.substring(index + 2, buffer.length)
+      } else {
+        break
+      }
 
-    if (containsCommand) {
-      head = buffer.substring(0, index)
-      tail = buffer.substring(index + 2, buffer.length)
-    } else {
-      await receiveChunk(response)
-      return
+      const { handler, multipart } = this.pending[0] || {}
+
+      if (handler && containsCommand && multipart && !pendingCommandResult) {
+        pendingCommandResult = head
+      } else if (
+        handler &&
+        containsCommand &&
+        multipart &&
+        pendingCommandResult
+      ) {
+        await handler(pendingCommandResult + '\r\n' + head)
+        pendingCommandResult = ''
+      } else if (handler && containsCommand) {
+        await handler(head)
+      }
+
+      buffer = tail
     }
-
-    const { handler, multipart } = this.pending[0] || {}
-
-    if (handler && containsCommand && multipart && !pendingCommandResult) {
-      pendingCommandResult = head
-    } else if (
-      handler &&
-      containsCommand &&
-      multipart &&
-      pendingCommandResult
-    ) {
-      await handler(pendingCommandResult + '\r\n' + head)
-    } else if (handler && containsCommand) {
-      await handler(head)
-    }
-
-    return await receiveChunk(tail, pendingCommandResult)
   }
 
   return this
