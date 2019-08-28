@@ -118,13 +118,23 @@ JackdClient.prototype.connect = async function() {
       }
 
       const { command, handler, multipart } = this.pending[0] || {};
-
-      const isReserveWithTimeout = command.indexOf("reserve-with-timeout") !== -1;
+      
+      // indexOf !== 0
+      const reserveWithTimeoutCmd = "reserve-with-timeout";
+      let k = 0;
+      let isReserveWithTimeout = true;
+      while(k < reserveWithTimeoutCmd.length && isReserveWithTimeout) {
+        if (command[k] !== reserveWithTimeoutCmd[k]) {
+          isReserveWithTimeout = false;
+        }
+        k++;
+      }
 
       if (handler && containsCommand && multipart && !pendingCommandResult) {
-        pendingCommandResult = head
         if (head === TIMED_OUT && isReserveWithTimeout) {
           await handler(head);
+        } else {
+          pendingCommandResult = head
         }
       } else if (
         handler &&
