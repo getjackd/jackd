@@ -239,7 +239,7 @@ JackdClient.prototype.reserve = createCommandHandler(
 JackdClient.prototype.reserveWithTimeout = createCommandHandler(
   seconds => `reserve-with-timeout ${seconds}\r\n`,
   reserveResponseHandler,
-  true
+  false
 )
 
 function reserveResponseHandler(response) {

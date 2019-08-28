@@ -15,6 +15,7 @@ declare class JackdClient {
     options?: JackdClient.PutOptions
   ): Promise<void>
   reserve(): Promise<JackdClient.Job>
+  reserveWithTimeout(timeoutSeconds: number): Promise<JackdClient.Job>
   delete(jobId: string): Promise<void>
   release(jobId: string, options?: JackdClient.ReleaseOptions): Promise<void>
   bury(jobId: string): Promise<void>
