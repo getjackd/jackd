@@ -7,7 +7,7 @@ export = JackdClient
 declare class JackdClient {
   constructor()
 
-  connect(options: JackdClient.ConnectOptions): Promise<JackdClient>
+  connect(options?: JackdClient.ConnectOptions): Promise<JackdClient>
   disconnect(): Promise<void>
 
   put(
