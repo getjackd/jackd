@@ -29,7 +29,7 @@ Most `beanstalkd` clients don't support promises (fivebeans, nodestalker) and th
 
 ## API
 
-The author of `beanstalkd` has a [good write-up of the `beanstalkd` protocol](https://github.com/beanstalkd/beanstalkd/blob/master/doc/protocol.txt), which makes it incredibly easy to development against. If you're unsure how `beanstalkd` works, it may be worth reading the specs before the API docs.
+The author of `beanstalkd` has a [good write-up of the `beanstalkd` protocol](https://github.com/beanstalkd/beanstalkd/blob/master/doc/protocol.txt), which makes it easy to develop against. If you're unsure how `beanstalkd` works, it may be worth reading the specs before the API docs.
 
 ### Overview
 
