@@ -117,10 +117,14 @@ JackdClient.prototype.connect = async function() {
         break
       }
 
-      const { handler, multipart } = this.pending[0] || {}
+      const { command, handler, multipart } = this.pending[0] || {}
 
       if (handler && containsCommand && multipart && !pendingCommandResult) {
-        pendingCommandResult = head
+        if (head === TIMED_OUT && command.startsWith('reserve-with-timeout')) {
+          await handler(head);
+        } else {
+          pendingCommandResult = head
+        }
       } else if (
         handler &&
         containsCommand &&
