@@ -211,16 +211,21 @@ You may be looking to design a process that does nothing else but consume jobs. 
 const Jackd = require('jackd')
 const beanstalkd = new Jackd()
 
-beanstalkd.connect()
+start()
 
-while (true) {
-  try {
-    const { id, payload } = await beanstalkd.reserve()
-    /* ... process job here ... */
-    await beanstalkd.delete(id)
-  } catch (err) {
-    // Log error somehow
-    console.error(err)
+async function start() {
+  // Might want to do some error handling around connections
+  await beanstalkd.connect()
+
+  while (true) {
+    try {
+      const { id, payload } = await beanstalkd.reserve()
+      /* ... process job here ... */
+      await beanstalkd.delete(id)
+    } catch (err) {
+      // Log error somehow
+      console.error(err)
+    }
   }
 }
 ```
