@@ -19,6 +19,12 @@ const job = await beanstalkd.reserve() // => { id: '1', payload: 'Hello!' }
 await beanstalkd.delete(job.id)
 ```
 
+## Installation
+
+```
+$ npm install jackd
+```
+
 ## Why
 
 Most `beanstalkd` clients don't support promises (fivebeans, nodestalker) and the ones that do have too many dependencies (node-beanstalkd-client). This package has:
