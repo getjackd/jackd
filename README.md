@@ -7,16 +7,19 @@
 const Jackd = require('jackd')
 const beanstalkd = new Jackd()
 
+await beanstalkd.connect()
 await beanstalkd.put('Hello!')
 
 /* consumer.js */
 const Jackd = require('jackd')
 const beanstalkd = new Jackd()
 
+await beanstalkd.connect()
 const job = await beanstalkd.reserve() // => { id: '1', payload: 'Hello!' }
 
 // ...process the job... then:
 await beanstalkd.delete(job.id)
+await beanstalkd.disconnect()
 ```
 
 ## Installation
