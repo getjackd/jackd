@@ -22,7 +22,7 @@ declare class JackdClient {
   kick(jobsCount: number): Promise<void>
   touch(jobId: string): Promise<void>
 
-  use(tubeId: string): Promise<void>
+  use(tubeId: string): Promise<string>
   watch(tubeId: string): Promise<number>
   ignore(tubeId: string): Promise<number>
 
