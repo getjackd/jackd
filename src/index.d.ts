@@ -13,7 +13,7 @@ declare class JackdClient {
   put(
     stringOrObject: string | object,
     options?: JackdClient.PutOptions
-  ): Promise<void>
+  ): Promise<string>
   reserve(): Promise<JackdClient.Job>
   delete(jobId: string): Promise<void>
   release(jobId: string, options?: JackdClient.ReleaseOptions): Promise<void>
