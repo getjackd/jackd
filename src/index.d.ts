@@ -8,6 +8,8 @@ declare class JackdClient {
   constructor()
 
   connect(options: JackdClient.ConnectOptions): Promise<JackdClient>
+  connect(): Promise<JackdClient>
+
   disconnect(): Promise<void>
   quit(): Promise<void>
   close(): Promise<void>
