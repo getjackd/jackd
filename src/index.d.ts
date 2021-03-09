@@ -28,7 +28,7 @@ declare class JackdClient {
   peek(jobId: string): Promise<JackdClient.Job>
   peekBuried(): Promise<JackdClient.Job>
 
-  use(tubeId: string): Promise<void>
+  use(tubeId: string): Promise<string>
   watch(tubeId: string): Promise<number>
   ignore(tubeId: string): Promise<number>
   getCurrentTube(): Promise<string>
