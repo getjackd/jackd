@@ -245,7 +245,7 @@ If you need to both publish and consume messages within the same Node.js process
 - Data will flow in one direction per client. One client will only `put`, the other will only `reserve/delete`.
 - Similarly, you'll have less tube confusion as you'll only need to `use` on one client and `watch/ignore` on the other.
 
-# Critical bug fixed in version 2
+## Critical bug fixed in version 2
 
 > :warning: Version 1.x of `jackd` erroneously encodes job payloads to and from ASCII. This can lead to job corruption if your jobs are any other encoding (like UTF-8 or binary). **You should upgrade immediately.**
 
@@ -271,6 +271,6 @@ const payload = buffer.toString()
 
 For backwards compatibility, `jackd` still has automatic job payload conversion when publishing `string`s and `Object`s. However, job payloads are now UTF-8 encoded, which is the Node.js default.
 
-## License
+# License
 
 MIT
