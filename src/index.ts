@@ -11,7 +11,8 @@ import {
   ReleaseArgs,
   JobArgs,
   TubeArgs,
-  CtorOpts
+  CtorOpts,
+  PutOpts
 } from './types'
 
 const DELIMITER = '\r\n'
@@ -185,7 +186,7 @@ export class JackdClient {
   use = this.createCommandHandler<TubeArgs, string>(
     tube => {
       assert(tube)
-      return `use ${tube}\r\n`
+      return Buffer.from(`use ${tube}\r\n`, 'ascii')
     },
     [
       async buffer => {
@@ -201,19 +202,30 @@ export class JackdClient {
     ]
   )
 
-  put = this.createCommandHandler<PutArgs, string>(
-    (payload: Buffer | string | object, { priority, delay, ttr } = {}) => {
+  put = this.createCommandHandler<PutArgs, Buffer>(
+    (
+      payload: Buffer | string | object,
+      { priority, delay, ttr }: PutOpts = {}
+    ) => {
       assert(payload)
-      let string: any = payload
+      let body: any = payload
 
-      if (typeof payload === 'object') {
-        string = JSON.stringify(payload)
+      // If the caller passed in an object, convert it to a string
+      if (typeof body === 'object') {
+        body = JSON.stringify(payload)
       }
 
-      const body = Buffer.from(string, 'ascii')
-      return `put ${priority || 0} ${delay || 0} ${ttr || 60} ${
-        body.length
-      }\r\n${string}\r\n`
+      // If the body is a string, convert it to a UTF-8 Buffer
+      if (typeof body === 'string') {
+        body = Buffer.from(body)
+      }
+
+      let command = Buffer.from(
+        `put ${priority || 0} ${delay || 0} ${ttr || 60} ${body.length}\r\n`,
+        'ascii'
+      )
+
+      return Buffer.concat([command, body, Buffer.from(DELIMITER, 'ascii')])
     },
     [
       async buffer => {
@@ -237,7 +249,7 @@ export class JackdClient {
   delete = this.createCommandHandler<JobArgs, void>(
     id => {
       assert(id)
-      return `delete ${id}\r\n`
+      return Buffer.from(`delete ${id}\r\n`, 'ascii')
     },
     [
       async buffer => {
@@ -278,19 +290,19 @@ export class JackdClient {
   }
 
   reserve = this.createCommandHandler<[], Job>(
-    () => 'reserve\r\n',
+    () => Buffer.from('reserve\r\n', 'ascii'),
     this.createReserveHandlers()
   )
 
   reserveWithTimeout = this.createCommandHandler<[], Job>(
-    seconds => `reserve-with-timeout ${seconds}\r\n`,
+    seconds => Buffer.from(`reserve-with-timeout ${seconds}\r\n`, 'ascii'),
     this.createReserveHandlers()
   )
 
   watch = this.createCommandHandler<TubeArgs, number>(
     tube => {
       assert(tube)
-      return `watch ${tube}\r\n`
+      return Buffer.from(`watch ${tube}\r\n`, 'ascii')
     },
     [
       async buffer => {
@@ -309,7 +321,7 @@ export class JackdClient {
   ignore = this.createCommandHandler<TubeArgs, number>(
     tube => {
       assert(tube)
-      return `ignore ${tube}\r\n`
+      return Buffer.from(`ignore ${tube}\r\n`, 'ascii')
     },
     [
       async buffer => {
@@ -327,7 +339,7 @@ export class JackdClient {
   bury = this.createCommandHandler<JobArgs, void>(
     (id, { priority } = {}) => {
       assert(id)
-      return `bury ${id} ${priority || 0}\r\n`
+      return Buffer.from(`bury ${id} ${priority || 0}\r\n`, 'ascii')
     },
     [
       async buffer => {
@@ -340,7 +352,7 @@ export class JackdClient {
 
   peekBuried = this.createCommandHandler<[], Job>(
     () => {
-      return `peek-buried\r\n`
+      return Buffer.from(`peek-buried\r\n`, 'ascii')
     },
     (() => {
       let id: string
@@ -376,14 +388,14 @@ export class JackdClient {
         if (this.useLegacyStringPayloads) {
           return payload.toString('ascii')
         }
-        
+
         return payload
       }
     ]
   )
 
   pauseTube = this.createCommandHandler<PauseTubeArgs, void>(
-    (tube, { delay } = {}) => `pause-tube ${tube} ${delay || 0}`,
+    (tube, { delay } = {}) => Buffer.from(`pause-tube ${tube} ${delay || 0}`, 'ascii'),
     [
       async buffer => {
         const ascii = validate(buffer, [NOT_FOUND])
@@ -396,7 +408,7 @@ export class JackdClient {
   release = this.createCommandHandler<ReleaseArgs, void>(
     (id, { priority, delay } = {}) => {
       assert(id)
-      return `release ${id} ${priority || 0} ${delay || 0}\r\n`
+      return Buffer.from(`release ${id} ${priority || 0} ${delay || 0}\r\n`, 'ascii')
     },
     [
       async buffer => {
@@ -410,7 +422,7 @@ export class JackdClient {
   touch = this.createCommandHandler<JobArgs, void>(
     id => {
       assert(id)
-      return `touch ${id}\r\n`
+      return Buffer.from(`touch ${id}\r\n`, 'ascii')
     },
     [
       async buffer => {
@@ -426,7 +438,7 @@ export class JackdClient {
   peek = this.createCommandHandler<JobArgs, Job>(
     id => {
       assert(id)
-      return `peek ${id}\r\n`
+      return Buffer.from(`peek ${id}\r\n`, 'ascii')
     },
     (() => {
       let id: string
@@ -450,7 +462,7 @@ export class JackdClient {
   kick = this.createCommandHandler<[jobsCount: number], void>(
     bound => {
       assert(bound)
-      return `kick ${bound}\r\n`
+      return Buffer.from(`kick ${bound}\r\n`, 'ascii')
     },
     [
       async buffer => {
@@ -464,7 +476,7 @@ export class JackdClient {
   kickJob = this.createCommandHandler<JobArgs, void>(
     id => {
       assert(id)
-      return `kick-job ${id}\r\n`
+      return Buffer.from(`kick-job ${id}\r\n`, 'ascii')
     },
     [
       async buffer => {
@@ -476,7 +488,7 @@ export class JackdClient {
   )
 
   getCurrentTube = this.createCommandHandler<[], string>(
-    () => `list-tube-used\r\n`,
+    () => Buffer.from(`list-tube-used\r\n`, 'ascii'),
     [
       async buffer => {
         const ascii = validate(buffer, [NOT_FOUND])
@@ -490,19 +502,18 @@ export class JackdClient {
   )
 
   createCommandHandler<TArgs extends any[], TReturn>(
-    commandStringFunction: (...args: any[]) => string,
+    commandStringFunction: (...args: any[]) => Buffer,
     handlers: CommandHandler[]
   ): (...args: TArgs) => Promise<TReturn> {
     const self = this
 
     return async function command() {
-      const commandString: string = commandStringFunction.apply(this, arguments)
-      await this.write(commandString)
+      const commandString: Buffer = commandStringFunction.apply(this, arguments)
+      await self.write(commandString)
 
       const emitter = new EventEmitter()
 
       self.executions.push({
-        command: commandString,
         handlers: handlers.concat(),
         emitter
       })

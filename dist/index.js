@@ -24,7 +24,7 @@ class JackdClient {
         ]);
         this.use = this.createCommandHandler(tube => {
             assert(tube);
-            return `use ${tube}\r\n`;
+            return Buffer.from(`use ${tube}\r\n`, 'ascii');
         }, [
             async (buffer) => {
                 const ascii = validate(buffer);
@@ -37,12 +37,15 @@ class JackdClient {
         ]);
         this.put = this.createCommandHandler((payload, { priority, delay, ttr } = {}) => {
             assert(payload);
-            let string = payload;
-            if (typeof payload === 'object') {
-                string = JSON.stringify(payload);
+            let body = payload;
+            if (typeof body === 'object') {
+                body = JSON.stringify(payload);
             }
-            const body = Buffer.from(string, 'ascii');
-            return `put ${priority || 0} ${delay || 0} ${ttr || 60} ${body.length}\r\n${string}\r\n`;
+            if (typeof body === 'string') {
+                body = Buffer.from(body);
+            }
+            let command = Buffer.from(`put ${priority || 0} ${delay || 0} ${ttr || 60} ${body.length}\r\n`, 'ascii');
+            return Buffer.concat([command, body, Buffer.from(DELIMITER, 'ascii')]);
         }, [
             async (buffer) => {
                 const ascii = validate(buffer, [
@@ -60,7 +63,7 @@ class JackdClient {
         ]);
         this.delete = this.createCommandHandler(id => {
             assert(id);
-            return `delete ${id}\r\n`;
+            return Buffer.from(`delete ${id}\r\n`, 'ascii');
         }, [
             async (buffer) => {
                 const ascii = validate(buffer, [NOT_FOUND]);
@@ -69,11 +72,11 @@ class JackdClient {
                 invalidResponse(ascii);
             }
         ]);
-        this.reserve = this.createCommandHandler(() => 'reserve\r\n', this.createReserveHandlers());
-        this.reserveWithTimeout = this.createCommandHandler(seconds => `reserve-with-timeout ${seconds}\r\n`, this.createReserveHandlers());
+        this.reserve = this.createCommandHandler(() => Buffer.from('reserve\r\n', 'ascii'), this.createReserveHandlers());
+        this.reserveWithTimeout = this.createCommandHandler(seconds => Buffer.from(`reserve-with-timeout ${seconds}\r\n`, 'ascii'), this.createReserveHandlers());
         this.watch = this.createCommandHandler(tube => {
             assert(tube);
-            return `watch ${tube}\r\n`;
+            return Buffer.from(`watch ${tube}\r\n`, 'ascii');
         }, [
             async (buffer) => {
                 const ascii = validate(buffer);
@@ -86,7 +89,7 @@ class JackdClient {
         ]);
         this.ignore = this.createCommandHandler(tube => {
             assert(tube);
-            return `ignore ${tube}\r\n`;
+            return Buffer.from(`ignore ${tube}\r\n`, 'ascii');
         }, [
             async (buffer) => {
                 const ascii = validate(buffer, [NOT_IGNORED]);
@@ -99,7 +102,7 @@ class JackdClient {
         ]);
         this.bury = this.createCommandHandler((id, { priority } = {}) => {
             assert(id);
-            return `bury ${id} ${priority || 0}\r\n`;
+            return Buffer.from(`bury ${id} ${priority || 0}\r\n`, 'ascii');
         }, [
             async (buffer) => {
                 const ascii = validate(buffer, [NOT_FOUND]);
@@ -109,7 +112,7 @@ class JackdClient {
             }
         ]);
         this.peekBuried = this.createCommandHandler(() => {
-            return `peek-buried\r\n`;
+            return Buffer.from(`peek-buried\r\n`, 'ascii');
         }, (() => {
             let id;
             return [
@@ -138,7 +141,7 @@ class JackdClient {
                 return payload;
             }
         ]);
-        this.pauseTube = this.createCommandHandler((tube, { delay } = {}) => `pause-tube ${tube} ${delay || 0}`, [
+        this.pauseTube = this.createCommandHandler((tube, { delay } = {}) => Buffer.from(`pause-tube ${tube} ${delay || 0}`, 'ascii'), [
             async (buffer) => {
                 const ascii = validate(buffer, [NOT_FOUND]);
                 if (ascii === PAUSED)
@@ -148,7 +151,7 @@ class JackdClient {
         ]);
         this.release = this.createCommandHandler((id, { priority, delay } = {}) => {
             assert(id);
-            return `release ${id} ${priority || 0} ${delay || 0}\r\n`;
+            return Buffer.from(`release ${id} ${priority || 0} ${delay || 0}\r\n`, 'ascii');
         }, [
             async (buffer) => {
                 const ascii = validate(buffer, [BURIED, NOT_FOUND]);
@@ -159,7 +162,7 @@ class JackdClient {
         ]);
         this.touch = this.createCommandHandler(id => {
             assert(id);
-            return `touch ${id}\r\n`;
+            return Buffer.from(`touch ${id}\r\n`, 'ascii');
         }, [
             async (buffer) => {
                 const ascii = validate(buffer, [NOT_FOUND]);
@@ -170,7 +173,7 @@ class JackdClient {
         ]);
         this.peek = this.createCommandHandler(id => {
             assert(id);
-            return `peek ${id}\r\n`;
+            return Buffer.from(`peek ${id}\r\n`, 'ascii');
         }, (() => {
             let id;
             return [
@@ -189,7 +192,7 @@ class JackdClient {
         })());
         this.kick = this.createCommandHandler(bound => {
             assert(bound);
-            return `kick ${bound}\r\n`;
+            return Buffer.from(`kick ${bound}\r\n`, 'ascii');
         }, [
             async (buffer) => {
                 const ascii = validate(buffer);
@@ -200,7 +203,7 @@ class JackdClient {
         ]);
         this.kickJob = this.createCommandHandler(id => {
             assert(id);
-            return `kick-job ${id}\r\n`;
+            return Buffer.from(`kick-job ${id}\r\n`, 'ascii');
         }, [
             async (buffer) => {
                 const ascii = validate(buffer, [NOT_FOUND]);
@@ -209,7 +212,7 @@ class JackdClient {
                 invalidResponse(ascii);
             }
         ]);
-        this.getCurrentTube = this.createCommandHandler(() => `list-tube-used\r\n`, [
+        this.getCurrentTube = this.createCommandHandler(() => Buffer.from(`list-tube-used\r\n`, 'ascii'), [
             async (buffer) => {
                 const ascii = validate(buffer, [NOT_FOUND]);
                 if (ascii.startsWith(USING)) {
@@ -336,10 +339,9 @@ class JackdClient {
         const self = this;
         return async function command() {
             const commandString = commandStringFunction.apply(this, arguments);
-            await this.write(commandString);
+            await self.write(commandString);
             const emitter = new EventEmitter();
             self.executions.push({
-                command: commandString,
                 handlers: handlers.concat(),
                 emitter
             });

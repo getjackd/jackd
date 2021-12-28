@@ -2,7 +2,6 @@
 import EventEmitter = require('events');
 export declare type CommandHandler = (chunk: Buffer) => Promise<any>;
 export declare class CommandExecution {
-    command: string;
     handlers: CommandHandler[];
     emitter: EventEmitter;
 }

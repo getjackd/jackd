@@ -1,6 +1,6 @@
 /// <reference types="node" />
 import { Socket } from 'net';
-import { CommandExecution, CommandHandler, ConnectOpts, Job, CtorOpts } from './types';
+import { CommandExecution, CommandHandler, ConnectOpts, Job, CtorOpts, PutOpts } from './types';
 export declare class JackdClient {
     socket: Socket;
     connected: Boolean;
@@ -20,7 +20,7 @@ export declare class JackdClient {
     disconnect: () => Promise<void>;
     executeCommand: (...args: any[]) => Promise<any>;
     use: (tubeId: string) => Promise<string>;
-    put: (payload: string | object | Buffer, options?: import("./types").PutOpts) => Promise<string>;
+    put: (payload: string | object | Buffer, options?: PutOpts) => Promise<Buffer>;
     delete: (jobId: string) => Promise<void>;
     createReserveHandlers(): CommandHandler[];
     reserve: () => Promise<Job>;
@@ -37,7 +37,7 @@ export declare class JackdClient {
     kick: (jobsCount: number) => Promise<void>;
     kickJob: (jobId: string) => Promise<void>;
     getCurrentTube: () => Promise<string>;
-    createCommandHandler<TArgs extends any[], TReturn>(commandStringFunction: (...args: any[]) => string, handlers: CommandHandler[]): (...args: TArgs) => Promise<TReturn>;
+    createCommandHandler<TArgs extends any[], TReturn>(commandStringFunction: (...args: any[]) => Buffer, handlers: CommandHandler[]): (...args: TArgs) => Promise<TReturn>;
 }
 export declare class InvalidResponseError extends Error {
     response: string;
