@@ -25,8 +25,12 @@ await beanstalkd.disconnect()
 ## Installation
 
 ```
-$ npm install jackd
+$ npm i jackd
 ```
+
+### Version 2 fixes a critical bug
+
+> :warning: If you're using `jackd` in production, you should upgrade `jackd` to version 2. [Read more here.](#critical-bug-fixed-in-version-2)
 
 ## Why
 
@@ -36,15 +40,13 @@ Most `beanstalkd` clients don't support promises (fivebeans, nodestalker) and th
 - Native promise support
 - No dependencies
 
-## API
+If you don't have experience using `beanstalkd`, [it's a good idea to read the `beanstalkd` protocol before using this library.](https://github.com/beanstalkd/beanstalkd/blob/master/doc/protocol.txt)
 
-The author of `beanstalkd` has a [good write-up of the `beanstalkd` protocol](https://github.com/beanstalkd/beanstalkd/blob/master/doc/protocol.txt), which makes it easy to develop against. If you're unsure how `beanstalkd` works, it may be worth reading the specs before the API docs.
-
-### Overview
+## Overview
 
 `beanstalkd` is a simple and blazing fast work queue. Producers connected through TCP sockets (by default on port `11300`) send in jobs to be processed at a later time by a consumer.
 
-#### Connecting and disconnecting
+### Connecting and disconnecting
 
 ```js
 const Jackd = require('jackd')
@@ -60,18 +62,20 @@ await beanstalkd.disconnect() // You can also use beanstalkd.close; it's an alia
 
 #### Adding jobs into a tube
 
-Jobs are simply payloads with a job ID attached. All payloads are ASCII encoded strings. Please keep this in mind if you need to send in special UTF-8 characters in your payloads.
+You can add jobs to a tube by using the `put` command, which accepts a payload and returns a job ID.
 
-`jackd` will automatically convert an `Object` into a `String` for you using `JSON.stringify`.
+Normally `beanstalkd` job payloads are byte arrays. Passing in a `Buffer` will send the payload as-is.
 
 ```js
-const jobId = await beanstalkd.put({ foo: 'bar' })
+// This is a byte array of a UTF-8 encoded string
+const jobId = await beanstalkd.put(Buffer.from('my long running job'))
 ```
 
-You can also just pass in a `String`.
+You can also pass in a `String` or an `Object` and `jackd` will automatically convert these values into byte arrays.
 
 ```js
-const jobId = await beanstalkd.put('my long running job')
+const jobId = await beanstalkd.put('my long running job') // Buffer.from(string)
+const jobId = await beanstalkd.put({ foo: 'bar' }) // Buffer.from(JSON.stringify(object))
 ```
 
 All jobs sent to beanstalkd have a priority, a delay, and TTR (time-to-run) specification. By default, all jobs are published with `0` priority, `0` delay, and `60` TTR, which means consumers will have 60 seconds to finish the job after reservation. You can override these defaults:
@@ -106,10 +110,15 @@ Consumers work by reserving jobs in a tube. Reserving is a blocking operation an
 
 ```js
 const { id, payload } = await beanstalkd.reserve() // wait until job incoming
-console.log({ id, payload }) // => { id: '1', payload: '{"foo":"bar"}' }
+console.log({ id, payload }) // => { id: '1', payload: Buffer }
 ```
 
-`jackd` will return the payload as-is. This means you'll have to do `JSON.parse` yourself if you passed in an `Object`.
+`jackd` will return the payload as-is as a `Buffer`. This means you'll have to handle the encoding yourself. For instance, if you sent in an `Object`, you'll need to first convert the `Buffer` to a `String` and then parse the JSON. If you passed in a `String`, the encoding was `UTF-8` by default.
+
+```js
+const { id, payload } = await beanstalkd.reserve()
+const object = JSON.parse(payload.toString())
+```
 
 #### Performing job operations (delete/bury/touch/release)
 
@@ -236,6 +245,32 @@ If you need to both publish and consume messages within the same Node.js process
 - Data will flow in one direction per client. One client will only `put`, the other will only `reserve/delete`.
 - Similarly, you'll have less tube confusion as you'll only need to `use` on one client and `watch/ignore` on the other.
 
-## License
+## Critical bug fixed in version 2
+
+> :warning: Version 1.x of `jackd` erroneously encodes job payloads to and from ASCII. This can lead to job corruption if your jobs are any other encoding (like UTF-8 or binary). **You should upgrade immediately.**
+
+A side effect of this bugfix is that job payloads from reservations are now returned as `Buffer`s and not `string`s. This is a breaking change. However, if you want minimal project impact and want to retain the ASCII functionality where incoming job payloads are encoded into ASCII, you can create `jackd` with the `useLegacyStringPayloads` option:
+
+```
+const beanstalkd = new Jackd({ useLegacyStringPayloads: true })
+```
+
+Enabling this option should result in a no-op change when upgrading `jackd` (all tests are passing with this option enabled). 
+
+**However you probably shouldn't do this. It's recommended you use `Buffer`s whenever possible.** `jackd` now has first class support for `Buffer`s and will not touch any `Buffer` payloads whatsoever. Working with `Buffer`s is very easy:
+
+```ts
+// Publishing
+await beanstalkd.put(Buffer.from('my cool job!'))
+await beanstalkd.put(Buffer.from(JSON.stringify(myCoolObject)))
+
+// Consuming
+const { id, payload: buffer } = await beanstalkd.reserve()
+const payload = buffer.toString()
+```
+
+For backwards compatibility, `jackd` still has automatic job payload conversion when publishing `string`s and `Object`s. However, job payloads are now UTF-8 encoded, which is the Node.js default.
+
+# License
 
 MIT

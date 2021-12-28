@@ -1,7 +1,7 @@
-{
+{ // Basically only need this file for Mocha
   "extends": ["eslint:recommended"],
   "parserOptions": {
-    "ecmaVersion": 8
+    "ecmaVersion": 2017
   },
   "rules": {
     "semi": ["error", "never"],
@@ -9,12 +9,9 @@
     "no-unused-vars": 1
   },
   "env": {
-    "browser": true,
     "node": true,
+    "es6": true,
     "mocha": true
   },
-  "globals": {
-    "Promise": true,
-    "verbose": true
-  }
+  "ignorePatterns": ["dist"]
 }

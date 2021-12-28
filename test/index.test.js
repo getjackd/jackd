@@ -1,31 +1,32 @@
 const { expect } = require('chai')
-const Jackd = require('../src')
+const Jackd = require('../dist')
 const YAML = require('yaml')
+const crypto = require('crypto')
 
-describe('jackd', function() {
-  it('can connect to and disconnect from beanstalkd', async function() {
-    const c = new Jackd()
+describe('jackd', function () {
+  it('can connect to and disconnect from beanstalkd', async function () {
+    const c = new Jackd({ useLegacyStringPayloads: true })
     await c.connect()
     await c.close()
   })
 
-  describe('connectivity', function() {
+  describe('connectivity', function () {
     setupTestSuiteLifecycleWithClient()
 
-    it('connected', function() {
+    it('connected', function () {
       expect(this.client.connected).to.be.ok
     })
 
-    it('disconnected', async function() {
+    it('disconnected', async function () {
       await this.client.disconnect()
       expect(this.client.ocnnected).to.not.be.ok
     })
   })
 
-  describe('handles errors', function() {
+  describe('handles errors', function () {
     setupTestSuiteLifecycleWithClient()
 
-    it('handles bad format', async function() {
+    it('handles bad format', async function () {
       try {
         await this.client.executeCommand('put 0 0\r\n')
       } catch (err) {
@@ -35,7 +36,7 @@ describe('jackd', function() {
       throw new Error('no-error-caught')
     })
 
-    it('handles unknown command', async function() {
+    it('handles unknown command', async function () {
       try {
         await this.client.executeCommand('random\r\n')
       } catch (err) {
@@ -46,16 +47,16 @@ describe('jackd', function() {
     })
   })
 
-  describe('producers', function() {
+  describe('producers', function () {
     setupTestSuiteLifecycleWithClient()
 
-    it('can insert jobs', async function() {
+    it('can insert jobs', async function () {
       const id = await this.client.put('some random job')
       expect(id).to.be.ok
       await this.client.delete(id)
     })
 
-    it('can insert jobs with objects', async function() {
+    it('can insert jobs with objects', async function () {
       const id = await this.client.put({ foo: 'bar' })
       expect(id).to.be.ok
 
@@ -65,7 +66,7 @@ describe('jackd', function() {
       await this.client.delete(id)
     })
 
-    it('can insert jobs with priority', async function() {
+    it('can insert jobs with priority', async function () {
       const id = await this.client.put({ foo: 'bar' }, { priority: 12342342 })
       expect(id).to.be.ok
 
@@ -76,10 +77,10 @@ describe('jackd', function() {
     })
   })
 
-  describe('consumers', function() {
+  describe('consumers', function () {
     setupTestSuiteLifecycleWithClient()
 
-    it('can receive jobs', async function() {
+    it('can receive jobs', async function () {
       const id = await this.client.put('some random job')
       const job = await this.client.reserve()
 
@@ -89,7 +90,7 @@ describe('jackd', function() {
       await this.client.delete(id)
     })
 
-    it('can receive delayed jobs', async function() {
+    it('can receive delayed jobs', async function () {
       const id = await this.client.put('some random job', {
         delay: 1
       })
@@ -102,7 +103,7 @@ describe('jackd', function() {
       await this.client.delete(id)
     })
 
-    it('can insert and process jobs on a different tube', async function() {
+    it('can insert and process jobs on a different tube', async function () {
       await this.client.use('some-other-tube')
       const id = await this.client.put('some random job on another tube')
 
@@ -115,7 +116,7 @@ describe('jackd', function() {
       await this.client.delete(id)
     })
 
-    it('will ignore jobs from default', async function() {
+    it('will ignore jobs from default', async function () {
       const defaultId = await this.client.put('job on default')
       await this.client.use('some-other-tube')
       const id = await this.client.put('some random job on another tube')
@@ -132,7 +133,7 @@ describe('jackd', function() {
       await this.client.delete(defaultId)
     })
 
-    it('handles multiple promises fired at once', async function() {
+    it('handles multiple promises fired at once', async function () {
       this.client.use('some-tube')
       const firstJobPromise = this.client.put('some-job')
       this.client.watch('some-random-tube')
@@ -146,9 +147,13 @@ describe('jackd', function() {
       await this.client.delete(id2)
     })
 
-    it('can receive huge jobs', async function() {
+    it('can receive huge jobs', async function () {
       // job larger than a socket data frame
-      const hugeText = new Array(50000).join('a')
+      const hugeText =
+        crypto.randomBytes(15000).toString('hex') +
+        '\r\n' +
+        crypto.randomBytes(15000).toString('hex')
+
       const id = await this.client.put(hugeText)
       const job = await this.client.reserve()
 
@@ -158,7 +163,7 @@ describe('jackd', function() {
       await this.client.delete(id)
     })
 
-    it('can peek buried jobs', async function() {
+    it('can peek buried jobs', async function () {
       await this.client.use('some-tube')
 
       const id = await this.client.put('some-job')
@@ -174,10 +179,10 @@ describe('jackd', function() {
     })
   })
 
-  describe('multi-part commands', function() {
+  describe('multi-part commands', function () {
     setupTestSuiteLifecycleWithClient()
 
-    it('brings back stats', async function() {
+    it('brings back stats', async function () {
       const stats = await this.client.executeMultiPartCommand('stats\r\n')
       YAML.parse(stats)
     })
@@ -185,12 +190,12 @@ describe('jackd', function() {
 })
 
 function setupTestSuiteLifecycleWithClient() {
-  beforeEach(async function() {
-    this.client = new Jackd()
+  beforeEach(async function () {
+    this.client = new Jackd({ useLegacyStringPayloads: true })
     await this.client.connect()
   })
 
-  afterEach(async function() {
+  afterEach(async function () {
     await this.client.close()
   })
 }
