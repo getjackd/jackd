@@ -28,9 +28,9 @@ await beanstalkd.disconnect()
 $ npm i jackd
 ```
 
-### Upgrade to version 2
+### Version 2 fixes a critical bug
 
-> :warning: You should upgrade `jackd` to version 2. It is a breaking change, but fixes a critical bug. [Read more here.](#critical-bug-fixed-in-version-2)
+> :warning: If you're using `jackd` in production, you should upgrade `jackd` to version 2. [Read more here.](#critical-bug-fixed-in-version-2)
 
 ## Why
 
@@ -247,17 +247,17 @@ If you need to both publish and consume messages within the same Node.js process
 
 # Critical bug fixed in version 2
 
-> :warning: Version 1.x of `jackd` is erroneously encoding job payloads to and from ASCII. This can lead to job corruption if your jobs are any other type of encoding (this includes UTF-8 and binary). **You should upgrade immediately.**
+> :warning: Version 1.x of `jackd` erroneously encodes job payloads to and from ASCII. This can lead to job corruption if your jobs are any other encoding (like UTF-8 or binary). **You should upgrade immediately.**
 
-A side effect of this bugfix is that job payloads from reservations are now returned as `Buffer`s and not `string`s. If you want to retain the ASCII functionality where incoming job payloads are encoded into ASCII, you can create `jackd` with the `useLegacyStringPayloads` option:
+A side effect of this bugfix is that job payloads from reservations are now returned as `Buffer`s and not `string`s. This is a breaking change. However, if you want minimal project impact and want to retain the ASCII functionality where incoming job payloads are encoded into ASCII, you can create `jackd` with the `useLegacyStringPayloads` option:
 
 ```
-const client = new Jackd({ useLegacyStringPayloads: true })
+const beanstalkd = new Jackd({ useLegacyStringPayloads: true })
 ```
 
 Enabling this option should result in a no-op change when upgrading `jackd` (all tests are passing with this option enabled). 
 
-**However you probably shouldn't do this. It's recommended you send in `Buffer`s whenever possible.** `jackd` now has first class support for `Buffer`s and will not touch any `Buffer` payloads whatsoever. Commands to and from `beanstalkd` are still in ASCII as per the protocol. Working with `Buffer`s is very easy:
+**However you probably shouldn't do this. It's recommended you use `Buffer`s whenever possible.** `jackd` now has first class support for `Buffer`s and will not touch any `Buffer` payloads whatsoever. Working with `Buffer`s is very easy:
 
 ```ts
 // Publishing
