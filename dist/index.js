@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.InvalidResponseError = void 0;
+exports.InvalidResponseError = exports.JackdClient = void 0;
 const net_1 = require("net");
 const assert = require("assert");
 const EventEmitter = require("events");
@@ -350,6 +350,7 @@ class JackdClient {
         };
     }
 }
+exports.JackdClient = JackdClient;
 module.exports = JackdClient;
 function validate(buffer, additionalErrors = []) {
     const ascii = buffer.toString('ascii');

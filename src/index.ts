@@ -16,7 +16,7 @@ import {
 
 const DELIMITER = '\r\n'
 
-class JackdClient {
+export class JackdClient {
   socket: Socket = new Socket()
   connected: Boolean = false
   buffer: Buffer = Buffer.from([])
