@@ -3,23 +3,19 @@
 [![Build Status](https://img.shields.io/circleci/project/github/getjackd/jackd/master.svg)](https://circleci.com/gh/getjackd/jackd/tree/master)
 
 ```js
-/* producer.js */
+// Connecting
 const Jackd = require('jackd')
 const beanstalkd = new Jackd()
-
 await beanstalkd.connect()
+
+// Producing
 await beanstalkd.put('Hello!')
 
-/* consumer.js */
-const Jackd = require('jackd')
-const beanstalkd = new Jackd()
-
-await beanstalkd.connect()
+// Consuming
 const job = await beanstalkd.reserve() // => { id: '1', payload: 'Hello!' }
 
 // ...process the job... then:
 await beanstalkd.delete(job.id)
-await beanstalkd.disconnect()
 ```
 
 ## Installation
@@ -28,23 +24,24 @@ await beanstalkd.disconnect()
 $ npm i jackd
 ```
 
-### Version 2 fixes a critical bug
+### Version 2.x fixes a critical bug
 
-> :warning: If you're using `jackd` in production, you should upgrade `jackd` to version 2. [Read more here.](#critical-bug-fixed-in-version-2)
+> :warning: If you're using `jackd` in production, you should upgrade `jackd` to version 2.x. [Read more here.](https://github.com/getjackd/jackd/releases/tag/v2.0.1)
 
 ## Why
 
-Most `beanstalkd` clients don't support promises (fivebeans, nodestalker) and the ones that do have too many dependencies (node-beanstalkd-client). This package has:
+Most `beanstalkd` clients don't support promises (fivebeans, nodestalker) and the ones that do have too many dependencies (node-beanstalkd-client). We wanted to make a package that has:
 
 - A concise and easy to use API
 - Native promise support
 - No dependencies
-
-If you don't have experience using `beanstalkd`, [it's a good idea to read the `beanstalkd` protocol before using this library.](https://github.com/beanstalkd/beanstalkd/blob/master/doc/protocol.txt)
+- Protocol accuracy/completeness
 
 ## Overview
 
 `beanstalkd` is a simple and blazing fast work queue. Producers connected through TCP sockets (by default on port `11300`) send in jobs to be processed at a later time by a consumer.
+
+If you don't have experience using `beanstalkd`, [it's a good idea to read the `beanstalkd` protocol before using this library.](https://github.com/beanstalkd/beanstalkd/blob/master/doc/protocol.txt)
 
 ### Connecting and disconnecting
 
@@ -55,7 +52,7 @@ const beanstalkd = new Jackd()
 await beanstalkd.connect() // Connects to localhost:11300
 await beanstalkd.connect({ host, port })
 
-await beanstalkd.disconnect() // You can also use beanstalkd.close; it's an alias
+await beanstalkd.disconnect() // You can also use beanstalkd.quit; it's an alias
 ```
 
 ### Producers
@@ -64,7 +61,7 @@ await beanstalkd.disconnect() // You can also use beanstalkd.close; it's an alia
 
 You can add jobs to a tube by using the `put` command, which accepts a payload and returns a job ID.
 
-Normally `beanstalkd` job payloads are byte arrays. Passing in a `Buffer` will send the payload as-is.
+`beanstalkd` job payloads are byte arrays. Passing in a `Buffer` will send the payload as-is.
 
 ```js
 // This is a byte array of a UTF-8 encoded string
@@ -85,7 +82,7 @@ await beanstalkd.put(
   { foo: 'bar' },
   {
     delay: 2, // Two second delay
-    priority: new Date().getTime(),
+    priority: 10,
     ttr: 600 // Ten minute delay
   }
 )
@@ -95,7 +92,7 @@ Jobs with lower priorities are handled first. Refer to [the protocol specs](http
 
 #### Using different tubes
 
-All jobs are added to the `default` tube by default. You can change the tube you want to produce a job in by using `use`.
+All jobs by default are added to the `default` tube. You can change where you produce jobs with the `use` command.
 
 ```js
 const tubeName = await beanstalkd.use('awesome-tube') // => 'awesome-tube'
@@ -106,18 +103,25 @@ await beanstalkd.put({ foo: 'bar' })
 
 #### Reserving a job
 
-Consumers work by reserving jobs in a tube. Reserving is a blocking operation and execution will stop until a job has been reserved.
+Consumers reserve jobs from tubes. Using `await` on a `reserve` command is a blocking operation and execution will stop until a job has been reserved.
 
 ```js
 const { id, payload } = await beanstalkd.reserve() // wait until job incoming
 console.log({ id, payload }) // => { id: '1', payload: Buffer }
 ```
 
-`jackd` will return the payload as-is as a `Buffer`. This means you'll have to handle the encoding yourself. For instance, if you sent in an `Object`, you'll need to first convert the `Buffer` to a `String` and then parse the JSON. If you passed in a `String`, the encoding was `UTF-8` by default.
+`jackd` will return the payload as-is. This means you'll have to handle the encoding yourself. For instance, if you sent in an `Object`, you'll need to first convert the `Buffer` to a `String` and then parse the JSON.
 
 ```js
 const { id, payload } = await beanstalkd.reserve()
 const object = JSON.parse(payload.toString())
+```
+
+If you passed in a `String`, you'll need to convert the incoming `Buffer` to a string.
+
+```js
+const { id, payload } = await beanstalkd.reserve()
+const message = payload.toString()
 ```
 
 #### Performing job operations (delete/bury/touch/release)
@@ -163,32 +167,34 @@ await beanstalkd.touch(id)
 
 #### Watching on multiple tubes
 
-By default, all consumers will watch the `default` tube only. So naturally consumers can elect what tubes they want to watch.
+By default, all consumers will watch the `default` tube only. Consumers can elect what tubes they want to watch.
 
 ```js
 const numberOfTubesWatched = await beanstalkd.watch('my-special-tube')
 // => 2
 ```
 
-If a consumer is watching a tube and it no longer needs it, you can choose to ignore that tube as well.
+Consumers can also ignore tubes.
 
 ```js
 const numberOfTubesWatched = await beanstalkd.ignore('default')
 // => 1
 ```
 
-Please keep in mind that attempting to ignore the only tube being watched will return an error.
+Be aware that attempting to ignore the only tube being watched will return an error.
 
-You can also bring back the current tubes watched using `list-tubes-watched`. However, there is no first-class support for this command because it returns YAML. This will be discussed in the next section.
+### Executing YAML commands
 
-### Executing arbitrary commands
+`beanstalkd` has a number of commands that return YAML payloads. These commands mostly return statistics regarding the current `beanstalkd` instance. `jackd`, on purpose, does not ship with a YAML parser. This is to:
 
-`jackd` only has first-class support for commands that do not return YAML. This was an intentional design decision to allow the developer using `jackd` the flexibility to specify what YAML parser they want to use.
+- Avoid dependencies
+- Stay close to the protocol spec
+- Let callers decide how to parse YAML
 
-To execute commands that return YAML, `jackd` exposes the `executeMultiPartCommand` function:
+`jackd` has full support for all commands, so you can expect to find these YAML commands in the API.
 
 ```js
-const stats = await beanstalkd.executeMultiPartCommand('stats\r\n')
+const stats = await beanstalkd.stats()
 /* =>
 ---
 current-jobs-urgent: 0
@@ -208,8 +214,6 @@ const { 'total-jobs': totalJobs } = YAML.parse(stats)
 console.log(totalJobs)
 // => 0
 ```
-
-There is also an `executeCommand` method which will allow you to execute arbitary commands on `beanstalkd`. Please keep in mind that support for this use-case is limited.
 
 ## Worker pattern
 
@@ -238,38 +242,6 @@ async function start() {
   }
 }
 ```
-
-If you need to both publish and consume messages within the same Node.js process you may find it useful to create two connections to `beanstalkd` using `jackd`. While performing `beanstalkd` push/pull operations are supported on a single client, opening two clients will give you the following benefits:
-
-- Likelihood of asynchronicity bugs is diminished (`beanstalkd` is synchronous in nature while Node.js is not)
-- Data will flow in one direction per client. One client will only `put`, the other will only `reserve/delete`.
-- Similarly, you'll have less tube confusion as you'll only need to `use` on one client and `watch/ignore` on the other.
-
-## Critical bug fixed in version 2
-
-> :warning: Version 1.x of `jackd` erroneously encodes job payloads to and from ASCII. This can lead to job corruption if your jobs are any other encoding (like UTF-8 or binary). **You should upgrade immediately.**
-
-A side effect of this bugfix is that job payloads from reservations are now returned as `Buffer`s and not `string`s. This is a breaking change. However, if you want minimal project impact and want to retain the ASCII functionality where incoming job payloads are encoded into ASCII, you can create `jackd` with the `useLegacyStringPayloads` option:
-
-```
-const beanstalkd = new Jackd({ useLegacyStringPayloads: true })
-```
-
-Enabling this option should result in a no-op change when upgrading `jackd` (all tests are passing with this option enabled). 
-
-**However you probably shouldn't do this. It's recommended you use `Buffer`s whenever possible.** `jackd` now has first class support for `Buffer`s and will not touch any `Buffer` payloads whatsoever. Working with `Buffer`s is very easy:
-
-```ts
-// Publishing
-await beanstalkd.put(Buffer.from('my cool job!'))
-await beanstalkd.put(Buffer.from(JSON.stringify(myCoolObject)))
-
-// Consuming
-const { id, payload: buffer } = await beanstalkd.reserve()
-const payload = buffer.toString()
-```
-
-For backwards compatibility, `jackd` still has automatic job payload conversion when publishing `string`s and `Object`s. However, job payloads are now UTF-8 encoded, which is the Node.js default.
 
 # License
 
