@@ -1,9 +1,9 @@
 import EventEmitter = require('events')
 
-export type CommandHandler = (chunk: Buffer) => Promise<any>
+export type CommandHandler<T> = (chunk: Buffer) => Promise<T>
 
-export class CommandExecution {
-  handlers: CommandHandler[]
+export class CommandExecution<T> {
+  handlers: CommandHandler<T | void>[]
   emitter: EventEmitter
 }
 
@@ -24,7 +24,7 @@ export interface PutOpts {
 
 export interface Job {
   id: string
-  payload: Buffer
+  payload: Buffer | string
 }
 
 export interface ReleaseOpts {

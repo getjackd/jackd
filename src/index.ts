@@ -1,6 +1,7 @@
 import { Socket } from 'net'
 import assert = require('assert')
 import EventEmitter = require('events')
+
 import {
   CommandExecution,
   CommandHandler,
@@ -21,52 +22,14 @@ export class JackdClient {
   socket: Socket = new Socket()
   connected: Boolean = false
   buffer: Buffer = Buffer.from([])
-  incomingBytes: number = 0
+  chunkLength: number = 0
   useLegacyStringPayloads: boolean = false
 
   // beanstalkd executes all commands serially. Because Node.js is single-threaded,
   // this allows us to queue up all of the messages and commands as they're invokved
   // without needing to explicitly wait for promises.
   messages: Buffer[] = []
-  executions: CommandExecution[] = []
-
-  async processChunk(head: Buffer) {
-    let index = -1
-
-    // If we're waiting on some bytes from a command...
-    if (this.incomingBytes > 0) {
-      // ...subtract it from the remaining bytes.
-      const remainingBytes = this.incomingBytes - head.length
-
-      // If we still have remaining bytes, leave. We need to wait for the
-      // data to come in. Payloads, regardless of their content, must end
-      // with the delimiter. This is why we check if it's over the negative
-      // delimiter length. If the incoming bytes is -2, we can be absolutely
-      // sure the entire message was processed because the delimiter was
-      // processed too.
-      if (remainingBytes > -DELIMITER.length) {
-        return
-      }
-
-      index = head.length - DELIMITER.length
-      this.incomingBytes = 0
-    } else {
-      index = head.indexOf(DELIMITER)
-    }
-
-    if (index > -1) {
-      this.messages.push(head.subarray(0, index))
-
-      // We have to start flushing executions as soon as we push messages. This is to avoid
-      // instances where job payloads might contain line breaks. We let the downstream handlers
-      // set the incoming bytes almost immediately.
-      await this.flushExecutions()
-
-      const tail = head.subarray(index + DELIMITER.length, head.length)
-      this.buffer = tail
-      await this.processChunk(tail)
-    }
-  }
+  executions: CommandExecution<any>[] = []
 
   constructor(opts?: CtorOpts) {
     if (opts && opts.useLegacyStringPayloads) {
@@ -90,6 +53,44 @@ export class JackdClient {
     })
   }
 
+  async processChunk(head: Buffer) {
+    let index = -1
+
+    // If we're waiting on some bytes from a command...
+    if (this.chunkLength > 0) {
+      // ...subtract it from the remaining bytes.
+      const remainingBytes = this.chunkLength - head.length
+
+      // If we still have remaining bytes, leave. We need to wait for the
+      // data to come in. Payloads, regardless of their content, must end
+      // with the delimiter. This is why we check if it's over the negative
+      // delimiter length. If the incoming bytes is -2, we can be absolutely
+      // sure the entire message was processed because the delimiter was
+      // processed too.
+      if (remainingBytes > -DELIMITER.length) {
+        return
+      }
+
+      index = head.length - DELIMITER.length
+      this.chunkLength = 0
+    } else {
+      index = head.indexOf(DELIMITER)
+    }
+
+    if (index > -1) {
+      this.messages.push(head.subarray(0, index))
+
+      // We have to start flushing executions as soon as we push messages. This is to avoid
+      // instances where job payloads might contain line breaks. We let the downstream handlers
+      // set the incoming bytes almost immediately.
+      await this.flushExecutions()
+
+      const tail = head.subarray(index + DELIMITER.length, head.length)
+      this.buffer = tail
+      await this.processChunk(tail)
+    }
+  }
+
   async flushExecutions() {
     for (let i = 0; i < this.executions.length; i++) {
       if (this.messages.length === 0) {
@@ -101,10 +102,11 @@ export class JackdClient {
       const { handlers, emitter } = execution
 
       try {
-        // Executions can have multiple handlers. This happens with multipart messages that wait
-        // for more information after the initial response.
+        // Executions can have multiple handlers. This happens with messages that expect
+        // data chunks after the initial response.
         while (handlers.length && this.messages.length) {
           const handler = handlers.shift()
+
           const result = await handler(this.messages.shift())
 
           if (handlers.length === 0) {
@@ -119,6 +121,10 @@ export class JackdClient {
         }
       } catch (err) {
         emitter.emit('reject', err)
+
+        // This execution is botched, don't hang the entire queue
+        this.executions.shift()
+        i--
       }
     }
   }
@@ -167,42 +173,13 @@ export class JackdClient {
   }
 
   async quit() {
-    await this.write(Buffer.from('quit\r\n', 'ascii'))
+    this.socket.end(Buffer.from('quit\r\n', 'ascii'))
   }
 
   close = this.quit
   disconnect = this.quit
 
-  executeCommand = this.createCommandHandler<[...args: any], any>(
-    command => command,
-    [
-      async response => {
-        validate(response)
-        return response
-      }
-    ]
-  )
-
-  use = this.createCommandHandler<TubeArgs, string>(
-    tube => {
-      assert(tube)
-      return Buffer.from(`use ${tube}\r\n`, 'ascii')
-    },
-    [
-      async buffer => {
-        const ascii = validate(buffer)
-
-        if (ascii.startsWith(USING)) {
-          const [, tube] = ascii.split(' ')
-          return tube
-        }
-
-        invalidResponse(ascii)
-      }
-    ]
-  )
-
-  put = this.createCommandHandler<PutArgs, Buffer>(
+  put = this.createCommandHandler<PutArgs, string>(
     (
       payload: Buffer | string | object,
       { priority, delay, ttr }: PutOpts = {}
@@ -246,6 +223,68 @@ export class JackdClient {
     ]
   )
 
+  use = this.createCommandHandler<TubeArgs, string>(
+    tube => {
+      assert(tube)
+      return Buffer.from(`use ${tube}\r\n`, 'ascii')
+    },
+    [
+      async buffer => {
+        const ascii = validate(buffer)
+
+        if (ascii.startsWith(USING)) {
+          const [, tube] = ascii.split(' ')
+          return tube
+        }
+
+        invalidResponse(ascii)
+      }
+    ]
+  )
+
+  createReserveHandlers(): [CommandHandler<void>, CommandHandler<Job>] {
+    const self = this
+    let id: string
+
+    return [
+      async buffer => {
+        const ascii = validate(buffer, [DEADLINE_SOON, TIMED_OUT])
+
+        if (ascii.startsWith(RESERVED)) {
+          const [, incomingId, bytes] = ascii.split(' ')
+          id = incomingId
+          self.chunkLength = parseInt(bytes)
+
+          return
+        }
+
+        invalidResponse(ascii)
+      },
+      async (payload: Buffer) => {
+        if (self.useLegacyStringPayloads) {
+          return { id, payload: payload.toString('ascii') }
+        }
+
+        return { id, payload }
+      }
+    ]
+  }
+
+  reserve = this.createCommandHandler<[], Job>(
+    () => Buffer.from('reserve\r\n', 'ascii'),
+    this.createReserveHandlers()
+  )
+
+  reserveWithTimeout = this.createCommandHandler<[number], Job>(
+    seconds => Buffer.from(`reserve-with-timeout ${seconds}\r\n`, 'ascii'),
+    this.createReserveHandlers()
+  )
+
+  reserveJob = this.createCommandHandler<[number], Job>(
+    id => Buffer.from(`reserve-job ${id}\r\n`, 'ascii'),
+    this.createReserveHandlers()
+  )
+
   delete = this.createCommandHandler<JobArgs, void>(
     id => {
       assert(id)
@@ -261,83 +300,25 @@ export class JackdClient {
     ]
   )
 
-  createReserveHandlers(): CommandHandler[] {
-    const self = this
-    let id: string
-
-    return [
-      async buffer => {
-        const ascii = validate(buffer, [DEADLINE_SOON, TIMED_OUT])
-
-        if (ascii.startsWith(RESERVED)) {
-          const [, incomingId, bytes] = ascii.split(' ')
-          id = incomingId
-          self.incomingBytes = parseInt(bytes)
-
-          return
-        }
-
-        invalidResponse(ascii)
-      },
-      async payload => {
-        if (self.useLegacyStringPayloads) {
-          return { id, payload: payload.toString('ascii') }
-        }
-
-        return { id, payload }
-      }
-    ]
-  }
-
-  reserve = this.createCommandHandler<[], Job>(
-    () => Buffer.from('reserve\r\n', 'ascii'),
-    this.createReserveHandlers()
-  )
-
-  reserveWithTimeout = this.createCommandHandler<[], Job>(
-    seconds => Buffer.from(`reserve-with-timeout ${seconds}\r\n`, 'ascii'),
-    this.createReserveHandlers()
-  )
-
-  watch = this.createCommandHandler<TubeArgs, number>(
-    tube => {
-      assert(tube)
-      return Buffer.from(`watch ${tube}\r\n`, 'ascii')
+  release = this.createCommandHandler<ReleaseArgs, void>(
+    (id, { priority, delay } = {}) => {
+      assert(id)
+      return Buffer.from(
+        `release ${id} ${priority || 0} ${delay || 0}\r\n`,
+        'ascii'
+      )
     },
     [
       async buffer => {
-        const ascii = validate(buffer)
-
-        if (ascii.startsWith(WATCHING)) {
-          const [, count] = ascii.split(' ')
-          return count
-        }
-
+        const ascii = validate(buffer, [BURIED, NOT_FOUND])
+        if (ascii === RELEASED) return
         invalidResponse(ascii)
       }
     ]
   )
 
-  ignore = this.createCommandHandler<TubeArgs, number>(
-    tube => {
-      assert(tube)
-      return Buffer.from(`ignore ${tube}\r\n`, 'ascii')
-    },
-    [
-      async buffer => {
-        const ascii = validate(buffer, [NOT_IGNORED])
-
-        if (ascii.startsWith(WATCHING)) {
-          const [, count] = ascii.split(' ')
-          return count
-        }
-        invalidResponse(ascii)
-      }
-    ]
-  )
-
-  bury = this.createCommandHandler<JobArgs, void>(
-    (id, { priority } = {}) => {
+  bury = this.createCommandHandler<[jobId: string, priority: number], void>(
+    (id, priority) => {
       assert(id)
       return Buffer.from(`bury ${id} ${priority || 0}\r\n`, 'ascii')
     },
@@ -345,75 +326,6 @@ export class JackdClient {
       async buffer => {
         const ascii = validate(buffer, [NOT_FOUND])
         if (ascii === BURIED) return
-        invalidResponse(ascii)
-      }
-    ]
-  )
-
-  peekBuried = this.createCommandHandler<[], Job>(
-    () => {
-      return Buffer.from(`peek-buried\r\n`, 'ascii')
-    },
-    (() => {
-      let id: string
-
-      return [
-        async buffer => {
-          const ascii = validate(buffer, [NOT_FOUND])
-          if (ascii.startsWith(FOUND)) {
-            const [, incomingId] = ascii.split(' ')
-            id = incomingId
-
-            return
-          }
-          invalidResponse(ascii)
-        },
-        async payload => {
-          return { id, payload }
-        }
-      ]
-    })()
-  )
-
-  executeMultiPartCommand = this.createCommandHandler<
-    [command: string],
-    string
-  >(
-    command => command,
-    [
-      async buffer => {
-        validate(buffer)
-      },
-      async payload => {
-        if (this.useLegacyStringPayloads) {
-          return payload.toString('ascii')
-        }
-
-        return payload
-      }
-    ]
-  )
-
-  pauseTube = this.createCommandHandler<PauseTubeArgs, void>(
-    (tube, { delay } = {}) => Buffer.from(`pause-tube ${tube} ${delay || 0}`, 'ascii'),
-    [
-      async buffer => {
-        const ascii = validate(buffer, [NOT_FOUND])
-        if (ascii === PAUSED) return
-        invalidResponse(ascii)
-      }
-    ]
-  )
-
-  release = this.createCommandHandler<ReleaseArgs, void>(
-    (id, { priority, delay } = {}) => {
-      assert(id)
-      return Buffer.from(`release ${id} ${priority || 0} ${delay || 0}\r\n`, 'ascii')
-    },
-    [
-      async buffer => {
-        const ascii = validate(buffer, [BURIED, NOT_FOUND])
-        if (ascii === RELEASED) return
         invalidResponse(ascii)
       }
     ]
@@ -433,33 +345,98 @@ export class JackdClient {
     ]
   )
 
-  /* Other commands */
-
-  peek = this.createCommandHandler<JobArgs, Job>(
-    id => {
-      assert(id)
-      return Buffer.from(`peek ${id}\r\n`, 'ascii')
+  watch = this.createCommandHandler<TubeArgs, number>(
+    tube => {
+      assert(tube)
+      return Buffer.from(`watch ${tube}\r\n`, 'ascii')
     },
-    (() => {
-      let id: string
+    [
+      async buffer => {
+        const ascii = validate(buffer)
 
-      return [
-        async buffer => {
-          const ascii = validate(buffer, [NOT_FOUND])
-          if (ascii.startsWith(FOUND)) {
-            const [, incomingId] = ascii.split(' ')
-            id = incomingId
-          }
-          invalidResponse(ascii)
-        },
-        async function (payload) {
-          return { id, payload }
+        if (ascii.startsWith(WATCHING)) {
+          const [, count] = ascii.split(' ')
+          return parseInt(count)
         }
-      ]
-    })()
+
+        invalidResponse(ascii)
+      }
+    ]
   )
 
-  kick = this.createCommandHandler<[jobsCount: number], void>(
+  ignore = this.createCommandHandler<TubeArgs, number>(
+    tube => {
+      assert(tube)
+      return Buffer.from(`ignore ${tube}\r\n`, 'ascii')
+    },
+    [
+      async buffer => {
+        const ascii = validate(buffer, [NOT_IGNORED])
+
+        if (ascii.startsWith(WATCHING)) {
+          const [, count] = ascii.split(' ')
+          return parseInt(count)
+        }
+        invalidResponse(ascii)
+      }
+    ]
+  )
+
+  pauseTube = this.createCommandHandler<PauseTubeArgs, void>(
+    (tube, { delay } = {}) =>
+      Buffer.from(`pause-tube ${tube} ${delay || 0}`, 'ascii'),
+
+    [
+      async buffer => {
+        const ascii = validate(buffer, [NOT_FOUND])
+        if (ascii === PAUSED) return
+        invalidResponse(ascii)
+      }
+    ]
+  )
+
+  /* Other commands */
+
+  peek = this.createCommandHandler<JobArgs, Job>(id => {
+    assert(id)
+    return Buffer.from(`peek ${id}\r\n`, 'ascii')
+  }, this.createPeekHandlers())
+
+  createPeekHandlers(): [CommandHandler<void>, CommandHandler<Job>] {
+    let self = this
+    let id: string
+
+    return [
+      async (buffer: Buffer) => {
+        const ascii = validate(buffer, [NOT_FOUND])
+        if (ascii.startsWith(FOUND)) {
+          const [, peekId, bytes] = ascii.split(' ')
+          id = peekId
+          self.chunkLength = parseInt(bytes)
+
+          return
+        }
+        invalidResponse(ascii)
+      },
+      async (payload: Buffer) => {
+        return { id, payload }
+      }
+    ]
+  }
+
+  peekReady = this.createCommandHandler<[], Job>(() => {
+    return Buffer.from(`peek-ready\r\n`, 'ascii')
+  }, this.createPeekHandlers())
+
+  peekDelayed = this.createCommandHandler<[], Job>(() => {
+    return Buffer.from(`peek-delayed\r\n`, 'ascii')
+  }, this.createPeekHandlers())
+
+  peekBuried = this.createCommandHandler<[], Job>(() => {
+    return Buffer.from(`peek-buried\r\n`, 'ascii')
+  }, this.createPeekHandlers())
+
+  kick = this.createCommandHandler<[jobsCount: number], number>(
     bound => {
       assert(bound)
       return Buffer.from(`kick ${bound}\r\n`, 'ascii')
@@ -467,7 +444,11 @@ export class JackdClient {
     [
       async buffer => {
         const ascii = validate(buffer)
-        if (ascii.startsWith(KICKED)) return
+        if (ascii.startsWith(KICKED)) {
+          const [, kicked] = ascii.split(' ')
+          return parseInt(kicked)
+        }
+
         invalidResponse(ascii)
       }
     ]
@@ -487,6 +468,54 @@ export class JackdClient {
     ]
   )
 
+  statsJob = this.createCommandHandler<JobArgs, string>(id => {
+    assert(id)
+    return Buffer.from(`stats-job ${id}\r\n`, 'ascii')
+  }, this.createYamlCommandHandlers())
+
+  statsTube = this.createCommandHandler<JobArgs, string>(tube => {
+    assert(tube)
+    return Buffer.from(`stats-tube ${tube}\r\n`, 'ascii')
+  }, this.createYamlCommandHandlers())
+
+  stats = this.createCommandHandler<JobArgs, string>(
+    () => Buffer.from(`stats\r\n`, 'ascii'),
+    this.createYamlCommandHandlers()
+  )
+
+  listTubes = this.createCommandHandler<JobArgs, string>(
+    () => Buffer.from(`list-tubes\r\n`, 'ascii'),
+    this.createYamlCommandHandlers()
+  )
+
+  listTubesWatched = this.createCommandHandler<JobArgs, string>(
+    () => Buffer.from(`list-tubes-watched\r\n`, 'ascii'),
+    this.createYamlCommandHandlers()
+  )
+
+  createYamlCommandHandlers(): [CommandHandler<void>, CommandHandler<string>] {
+    const self = this
+
+    return [
+      async buffer => {
+        const ascii = validate(buffer, [DEADLINE_SOON, TIMED_OUT])
+
+        if (ascii.startsWith(OK)) {
+          const [, bytes] = ascii.split(' ')
+          self.chunkLength = parseInt(bytes)
+
+          return
+        }
+
+        invalidResponse(ascii)
+      },
+      async (payload: Buffer) => {
+        // Payloads for internal beanstalkd commands are always returned in ASCII
+        return payload.toString('ascii')
+      }
+    ]
+  }
+
   getCurrentTube = this.createCommandHandler<[], string>(
     () => Buffer.from(`list-tube-used\r\n`, 'ascii'),
     [
@@ -501,9 +530,11 @@ export class JackdClient {
     ]
   )
 
+  listTubeUsed = this.getCurrentTube
+
   createCommandHandler<TArgs extends any[], TReturn>(
     commandStringFunction: (...args: any[]) => Buffer,
-    handlers: CommandHandler[]
+    handlers: CommandHandler<TReturn | void>[]
   ): (...args: TArgs) => Promise<TReturn> {
     const self = this
 
@@ -571,3 +602,4 @@ const WATCHING = 'WATCHING'
 const NOT_IGNORED = 'NOT_IGNORED'
 const KICKED = 'KICKED'
 const PAUSED = 'PAUSED'
+const OK = 'OK'

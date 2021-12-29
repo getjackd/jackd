@@ -1,8 +1,8 @@
 /// <reference types="node" />
 import EventEmitter = require('events');
-export declare type CommandHandler = (chunk: Buffer) => Promise<any>;
-export declare class CommandExecution {
-    handlers: CommandHandler[];
+export declare type CommandHandler<T> = (chunk: Buffer) => Promise<T>;
+export declare class CommandExecution<T> {
+    handlers: CommandHandler<T | void>[];
     emitter: EventEmitter;
 }
 export interface CtorOpts {
@@ -19,7 +19,7 @@ export interface PutOpts {
 }
 export interface Job {
     id: string;
-    payload: Buffer;
+    payload: Buffer | string;
 }
 export interface ReleaseOpts {
     priority?: number;

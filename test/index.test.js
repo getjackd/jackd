@@ -23,57 +23,46 @@ describe('jackd', function () {
     })
   })
 
-  describe('handles errors', function () {
-    setupTestSuiteLifecycleWithClient()
-
-    it('handles bad format', async function () {
-      try {
-        await this.client.executeCommand('put 0 0\r\n')
-      } catch (err) {
-        expect(err.message).to.equal('BAD_FORMAT')
-        return
-      }
-      throw new Error('no-error-caught')
-    })
-
-    it('handles unknown command', async function () {
-      try {
-        await this.client.executeCommand('random\r\n')
-      } catch (err) {
-        expect(err.message).to.equal('UNKNOWN_COMMAND')
-        return
-      }
-      throw new Error('no-error-caught')
-    })
-  })
-
   describe('producers', function () {
     setupTestSuiteLifecycleWithClient()
 
     it('can insert jobs', async function () {
-      const id = await this.client.put('some random job')
-      expect(id).to.be.ok
-      await this.client.delete(id)
+      let id
+
+      try {
+        id = await this.client.put('some random job')
+        expect(id).to.be.ok
+      } finally {
+        if (id) await this.client.delete(id)
+      }
     })
 
     it('can insert jobs with objects', async function () {
-      const id = await this.client.put({ foo: 'bar' })
-      expect(id).to.be.ok
+      let id
 
-      const job = await this.client.reserve()
-      expect(job.payload).to.equal('{"foo":"bar"}')
+      try {
+        id = await this.client.put({ foo: 'bar' })
+        expect(id).to.be.ok
 
-      await this.client.delete(id)
+        const job = await this.client.reserve()
+        expect(job.payload).to.equal('{"foo":"bar"}')
+      } finally {
+        if (id) await this.client.delete(id)
+      }
     })
 
     it('can insert jobs with priority', async function () {
-      const id = await this.client.put({ foo: 'bar' }, { priority: 12342342 })
-      expect(id).to.be.ok
+      let id
 
-      const job = await this.client.reserve()
-      await this.client.delete(id)
+      try {
+        id = await this.client.put({ foo: 'bar' }, { priority: 12342342 })
+        expect(id).to.be.ok
 
-      expect(job.payload).to.equal('{"foo":"bar"}')
+        const job = await this.client.reserve()
+        expect(job.payload).to.equal('{"foo":"bar"}')
+      } finally {
+        if (id) await this.client.delete(id)
+      }
     })
   })
 
@@ -81,110 +70,173 @@ describe('jackd', function () {
     setupTestSuiteLifecycleWithClient()
 
     it('can receive jobs', async function () {
-      const id = await this.client.put('some random job')
-      const job = await this.client.reserve()
+      let id
+      try {
+        id = await this.client.put('some random job')
+        const job = await this.client.reserve()
 
-      expect(job.id).to.equal(id)
-      expect(job.payload).to.equal('some random job')
-
-      await this.client.delete(id)
+        expect(job.id).to.equal(id)
+        expect(job.payload).to.equal('some random job')
+      } finally {
+        if (id) await this.client.delete(id)
+      }
     })
 
     it('can receive delayed jobs', async function () {
-      const id = await this.client.put('some random job', {
-        delay: 1
-      })
+      let id
 
-      const job = await this.client.reserve()
+      try {
+        id = await this.client.put('some random job', {
+          delay: 1
+        })
 
-      expect(job.id).to.equal(id)
-      expect(job.payload).to.equal('some random job')
+        const job = await this.client.reserve()
 
-      await this.client.delete(id)
+        expect(job.id).to.equal(id)
+        expect(job.payload).to.equal('some random job')
+      } finally {
+        if (id) await this.client.delete(id)
+      }
     })
 
     it('can insert and process jobs on a different tube', async function () {
-      await this.client.use('some-other-tube')
-      const id = await this.client.put('some random job on another tube')
+      let id
+      try {
+        await this.client.use('some-other-tube')
+        id = await this.client.put('some random job on another tube')
 
-      await this.client.watch('some-other-tube')
-      const job = await this.client.reserve()
+        await this.client.watch('some-other-tube')
+        const job = await this.client.reserve()
 
-      expect(job.id).to.equal(id)
-      expect(job.payload).to.equal('some random job on another tube')
-
-      await this.client.delete(id)
+        expect(job.id).to.equal(id)
+        expect(job.payload).to.equal('some random job on another tube')
+      } finally {
+        if (id) await this.client.delete(id)
+      }
     })
 
     it('will ignore jobs from default', async function () {
-      const defaultId = await this.client.put('job on default')
-      await this.client.use('some-other-tube')
-      const id = await this.client.put('some random job on another tube')
+      let id, defaultId
+      try {
+        defaultId = await this.client.put('job on default')
+        await this.client.use('some-other-tube')
+        id = await this.client.put('some random job on another tube')
 
-      await this.client.watch('some-other-tube')
-      await this.client.ignore('default')
+        await this.client.watch('some-other-tube')
+        await this.client.ignore('default')
 
-      const job = await this.client.reserve()
+        const job = await this.client.reserve()
 
-      expect(job.id).to.equal(id)
-      expect(job.payload).to.equal('some random job on another tube')
-
-      await this.client.delete(id)
-      await this.client.delete(defaultId)
+        expect(job.id).to.equal(id)
+        expect(job.payload).to.equal('some random job on another tube')
+      } finally {
+        if (id) await this.client.delete(id)
+        if (defaultId) await this.client.delete(defaultId)
+      }
     })
 
     it('handles multiple promises fired at once', async function () {
-      this.client.use('some-tube')
-      const firstJobPromise = this.client.put('some-job')
-      this.client.watch('some-random-tube')
-      this.client.use('some-another-tube')
-      const secondJobPromise = this.client.put('some-job')
+      let id1, id2
 
-      const id1 = await firstJobPromise
-      const id2 = await secondJobPromise
+      try {
+        this.client.use('some-tube')
+        const firstJobPromise = this.client.put('some-job')
+        this.client.watch('some-random-tube')
+        this.client.use('some-another-tube')
+        const secondJobPromise = this.client.put('some-job')
 
-      await this.client.delete(id1)
-      await this.client.delete(id2)
+        id1 = await firstJobPromise
+        id2 = await secondJobPromise
+      } finally {
+        if (id1) await this.client.delete(id1)
+        if (id2) await this.client.delete(id2)
+      }
     })
 
     it('can receive huge jobs', async function () {
-      // job larger than a socket data frame
-      const hugeText =
-        crypto.randomBytes(15000).toString('hex') +
-        '\r\n' +
-        crypto.randomBytes(15000).toString('hex')
+      let id
 
-      const id = await this.client.put(hugeText)
-      const job = await this.client.reserve()
+      try {
+        // job larger than a socket data frame
+        const hugeText =
+          crypto.randomBytes(15000).toString('hex') +
+          '\r\n' +
+          crypto.randomBytes(15000).toString('hex')
 
-      expect(job.id).to.equal(id)
-      expect(job.payload).to.equal(hugeText)
+        id = await this.client.put(hugeText)
+        const job = await this.client.reserve()
 
-      await this.client.delete(id)
+        expect(job.id).to.equal(id)
+        expect(job.payload).to.equal(hugeText)
+      } finally {
+        if (id) await this.client.delete(id)
+      }
     })
 
     it('can peek buried jobs', async function () {
-      await this.client.use('some-tube')
+      let id
+      try {
+        await this.client.use('some-tube')
 
-      const id = await this.client.put('some-job')
+        id = await this.client.put('some-job')
 
-      await this.client.watch('some-tube')
-      await this.client.reserve()
-      await this.client.bury(id)
+        await this.client.watch('some-tube')
+        await this.client.reserve()
+        await this.client.bury(id)
 
-      const job = await this.client.peekBuried()
+        const job = await this.client.peekBuried()
 
-      expect(job.id).to.equal(id)
-      await this.client.delete(id)
+        expect(job.id).to.equal(id)
+      } finally {
+        if (id) await this.client.delete(id)
+      }
     })
   })
 
-  describe('multi-part commands', function () {
+  describe('stats', function () {
     setupTestSuiteLifecycleWithClient()
 
     it('brings back stats', async function () {
-      const stats = await this.client.executeMultiPartCommand('stats\r\n')
+      const stats = await this.client.stats()
       YAML.parse(stats)
+    })
+  })
+
+  describe('bugfixes', function () {
+    setupTestSuiteLifecycleWithClient()
+
+    it('can receive jobs with new lines jobs', async function () {
+      let id
+
+      try {
+        // job larger than a socket data frame
+        const payload = 'this job should not fail!\r\n'
+
+        id = await this.client.put(payload)
+        const job = await this.client.reserve()
+
+        expect(job.id).to.equal(id)
+        expect(job.payload).to.equal(payload)
+      } finally {
+        if (id) await this.client.delete(id)
+      }
+    })
+
+    it('can continue execution after bad command', async function () {
+      let id
+
+      try {
+        // Bad command
+        await this.client.delete('nonexistent job')
+      } catch (err) {
+        expect(err).to.be.an('error')
+      }
+
+      try {
+        id = await this.client.put('my awesome job')
+      } finally {
+        if (id) await this.client.delete(id)
+      }
     })
   })
 })
