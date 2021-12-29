@@ -261,14 +261,13 @@ export class JackdClient {
         invalidResponse(ascii)
       },
       async (payload: Buffer) => {
-        if (self.useLegacyStringPayloads) {
-          return { id, payload: payload.toString('ascii') }
-        }
-
-        return { id, payload }
+        return { id, payload: this.decodeAsciiWhenLegacy(payload) }
       }
     ]
   }
+
+  decodeAsciiWhenLegacy = (payload: Buffer): Buffer | string =>
+    this.useLegacyStringPayloads ? payload.toString('ascii') : payload
 
   reserve = this.createCommandHandler<[], Job>(
     () => Buffer.from('reserve\r\n', 'ascii'),
@@ -419,7 +418,7 @@ export class JackdClient {
         invalidResponse(ascii)
       },
       async (payload: Buffer) => {
-        return { id, payload }
+        return { id, payload: this.decodeAsciiWhenLegacy(payload) }
       }
     ]
   }

@@ -55,6 +55,7 @@ class JackdClient {
                 invalidResponse(ascii);
             }
         ]);
+        this.decodeAsciiWhenLegacy = (payload) => this.useLegacyStringPayloads ? payload.toString('ascii') : payload;
         this.reserve = this.createCommandHandler(() => Buffer.from('reserve\r\n', 'ascii'), this.createReserveHandlers());
         this.reserveWithTimeout = this.createCommandHandler(seconds => Buffer.from(`reserve-with-timeout ${seconds}\r\n`, 'ascii'), this.createReserveHandlers());
         this.reserveJob = this.createCommandHandler(id => Buffer.from(`reserve-job ${id}\r\n`, 'ascii'), this.createReserveHandlers());
@@ -303,10 +304,7 @@ class JackdClient {
                 invalidResponse(ascii);
             },
             async (payload) => {
-                if (self.useLegacyStringPayloads) {
-                    return { id, payload: payload.toString('ascii') };
-                }
-                return { id, payload };
+                return { id, payload: this.decodeAsciiWhenLegacy(payload) };
             }
         ];
     }
@@ -325,7 +323,7 @@ class JackdClient {
                 invalidResponse(ascii);
             },
             async (payload) => {
-                return { id, payload };
+                return { id, payload: this.decodeAsciiWhenLegacy(payload) };
             }
         ];
     }
