@@ -1,9 +1,11 @@
 {
   "name": "jackd",
-  "version": "2.1.1",
+  "version": "2.1.2",
   "description": "Modern beanstalkd client for Node.js",
   "main": "dist/index.js",
   "scripts": {
+    "start": "tsc",
+    "dev": "tsc --watch",
     "lint": "eslint src",
     "test": "mocha --bail"
   },

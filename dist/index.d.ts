@@ -1,6 +1,7 @@
 /// <reference types="node" />
 import { Socket } from 'net';
 import { CommandExecution, CommandHandler, ConnectOpts, Job, CtorOpts, PutOpts } from './types';
+export default JackdClient;
 export declare class JackdClient {
     socket: Socket;
     connected: Boolean;
