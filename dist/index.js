@@ -5,7 +5,6 @@ const net_1 = require("net");
 const assert = require("assert");
 const EventEmitter = require("events");
 const DELIMITER = '\r\n';
-exports.default = JackdClient;
 class JackdClient {
     constructor(opts) {
         this.socket = new net_1.Socket();
@@ -363,6 +362,8 @@ class JackdClient {
     }
 }
 exports.JackdClient = JackdClient;
+module.exports = JackdClient;
+exports.default = JackdClient;
 function validate(buffer, additionalErrors = []) {
     const ascii = buffer.toString('ascii');
     const errors = [OUT_OF_MEMORY, INTERNAL_ERROR, BAD_FORMAT, UNKNOWN_COMMAND];

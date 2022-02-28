@@ -1,7 +1,6 @@
 /// <reference types="node" />
 import { Socket } from 'net';
 import { CommandExecution, CommandHandler, ConnectOpts, Job, CtorOpts, PutOpts } from './types';
-export default JackdClient;
 export declare class JackdClient {
     socket: Socket;
     connected: Boolean;
@@ -50,6 +49,7 @@ export declare class JackdClient {
     listTubeUsed: () => Promise<string>;
     createCommandHandler<TArgs extends any[], TReturn>(commandStringFunction: (...args: any[]) => Buffer, handlers: CommandHandler<TReturn | void>[]): (...args: TArgs) => Promise<TReturn>;
 }
+export default JackdClient;
 export declare class InvalidResponseError extends Error {
     response: string;
 }
