@@ -18,8 +18,6 @@ import {
 
 const DELIMITER = '\r\n'
 
-export default JackdClient;
-
 export class JackdClient {
   socket: Socket = new Socket()
   connected: Boolean = false
@@ -557,6 +555,10 @@ export class JackdClient {
     }
   }
 }
+
+module.exports = JackdClient;
+
+export default JackdClient;
 
 function validate(buffer: Buffer, additionalErrors: string[] = []): string {
   const ascii = buffer.toString('ascii')

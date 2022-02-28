@@ -49,6 +49,7 @@ export declare class JackdClient {
     listTubeUsed: () => Promise<string>;
     createCommandHandler<TArgs extends any[], TReturn>(commandStringFunction: (...args: any[]) => Buffer, handlers: CommandHandler<TReturn | void>[]): (...args: TArgs) => Promise<TReturn>;
 }
+export default JackdClient;
 export declare class InvalidResponseError extends Error {
     response: string;
 }
