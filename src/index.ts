@@ -558,8 +558,6 @@ export class JackdClient {
   }
 }
 
-module.exports = JackdClient
-
 function validate(buffer: Buffer, additionalErrors: string[] = []): string {
   const ascii = buffer.toString('ascii')
   const errors = [OUT_OF_MEMORY, INTERNAL_ERROR, BAD_FORMAT, UNKNOWN_COMMAND]
