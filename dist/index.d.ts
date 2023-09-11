@@ -20,7 +20,7 @@ export declare class JackdClient {
     disconnect: () => Promise<void>;
     put: (payload: string | object | Buffer, options?: PutOpts) => Promise<string>;
     use: (tubeId: string) => Promise<string>;
-    createReserveHandlers(): [CommandHandler<void>, CommandHandler<Job>];
+    createReserveHandlers(additionalResponses?: Array<string>): [CommandHandler<void>, CommandHandler<Job>];
     decodeAsciiWhenLegacy: (payload: Buffer) => Buffer | string;
     reserve: () => Promise<Job>;
     reserveWithTimeout: (args_0: number) => Promise<Job>;

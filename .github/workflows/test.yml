@@ -11,7 +11,7 @@ jobs:
     runs-on: ubuntu-latest
     services:
       beanstalkd:
-        image: schickling/beanstalkd
+        image: ghcr.io/beanstalkd/beanstalkd:latest
         ports:
           - 11300:11300
     steps:

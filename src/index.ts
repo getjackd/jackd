@@ -242,13 +242,19 @@ export class JackdClient {
     ]
   )
 
-  createReserveHandlers(): [CommandHandler<void>, CommandHandler<Job>] {
+  createReserveHandlers(
+    additionalResponses: Array<string> = []
+  ): [CommandHandler<void>, CommandHandler<Job>] {
     const self = this
     let id: string
 
     return [
       async buffer => {
-        const ascii = validate(buffer, [DEADLINE_SOON, TIMED_OUT])
+        const ascii = validate(buffer, [
+          DEADLINE_SOON,
+          TIMED_OUT,
+          ...additionalResponses
+        ])
 
         if (ascii.startsWith(RESERVED)) {
           const [, incomingId, bytes] = ascii.split(' ')
@@ -281,7 +287,7 @@ export class JackdClient {
 
   reserveJob = this.createCommandHandler<[number], Job>(
     id => Buffer.from(`reserve-job ${id}\r\n`, 'ascii'),
-    this.createReserveHandlers()
+    this.createReserveHandlers([NOT_FOUND])
   )
 
   delete = this.createCommandHandler<JobArgs, void>(
@@ -556,15 +562,15 @@ export class JackdClient {
   }
 }
 
-module.exports = JackdClient;
+module.exports = JackdClient
 
-export default JackdClient;
+export default JackdClient
 
-function validate(buffer: Buffer, additionalErrors: string[] = []): string {
+function validate(buffer: Buffer, additionalResponses: string[] = []): string {
   const ascii = buffer.toString('ascii')
   const errors = [OUT_OF_MEMORY, INTERNAL_ERROR, BAD_FORMAT, UNKNOWN_COMMAND]
 
-  if (errors.concat(additionalErrors).some(error => ascii.startsWith(error))) {
+  if (errors.concat(additionalResponses).some(error => ascii.startsWith(error))) {
     throw new Error(ascii)
   }
 

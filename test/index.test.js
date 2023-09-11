@@ -45,7 +45,7 @@ describe('jackd', function () {
         expect(id).to.be.ok
 
         const job = await this.client.reserve()
-        expect(job.payload).to.equal('{"foo":"bar"}')
+        expect(String(job.payload)).to.equal('{"foo":"bar"}')
       } finally {
         if (id) await this.client.delete(id)
       }
@@ -59,7 +59,7 @@ describe('jackd', function () {
         expect(id).to.be.ok
 
         const job = await this.client.reserve()
-        expect(job.payload).to.equal('{"foo":"bar"}')
+        expect(String(job.payload)).to.equal('{"foo":"bar"}')
       } finally {
         if (id) await this.client.delete(id)
       }
@@ -69,20 +69,20 @@ describe('jackd', function () {
   describe('consumers', function () {
     setupTestSuiteLifecycleWithClient()
 
-    it('can receive jobs', async function () {
+    it('can reserve jobs', async function () {
       let id
       try {
         id = await this.client.put('some random job')
         const job = await this.client.reserve()
 
         expect(job.id).to.equal(id)
-        expect(job.payload).to.equal('some random job')
+        expect(String(job.payload)).to.equal('some random job')
       } finally {
         if (id) await this.client.delete(id)
       }
     })
 
-    it('can receive delayed jobs', async function () {
+    it('can reserve delayed jobs', async function () {
       let id
 
       try {
@@ -93,9 +93,32 @@ describe('jackd', function () {
         const job = await this.client.reserve()
 
         expect(job.id).to.equal(id)
-        expect(job.payload).to.equal('some random job')
+        expect(String(job.payload)).to.equal('some random job')
       } finally {
         if (id) await this.client.delete(id)
+      }
+    })
+
+    it('can reserve jobs by id', async function () {
+      let id
+
+      try {
+        id = await this.client.put('some random job', {
+          delay: 1
+        })
+
+        const job = await this.client.reserveJob(id)
+        expect(String(job.payload)).to.equal('some random job')
+      } finally {
+        if (id) await this.client.delete(id)
+      }
+    })
+
+    it('handles not found', async function () {
+      try {
+        await this.client.reserveJob(4)
+      } catch (err) {
+        expect(err.message).to.equal('NOT_FOUND')
       }
     })
 
@@ -109,7 +132,7 @@ describe('jackd', function () {
         const job = await this.client.reserve()
 
         expect(job.id).to.equal(id)
-        expect(job.payload).to.equal('some random job on another tube')
+        expect(String(job.payload)).to.equal('some random job on another tube')
       } finally {
         if (id) await this.client.delete(id)
       }
@@ -128,7 +151,7 @@ describe('jackd', function () {
         const job = await this.client.reserve()
 
         expect(job.id).to.equal(id)
-        expect(job.payload).to.equal('some random job on another tube')
+        expect(String(job.payload)).to.equal('some random job on another tube')
       } finally {
         if (id) await this.client.delete(id)
         if (defaultId) await this.client.delete(defaultId)
@@ -167,7 +190,7 @@ describe('jackd', function () {
         const job = await this.client.reserve()
 
         expect(job.id).to.equal(id)
-        expect(job.payload).to.equal(hugeText)
+        expect(String(job.payload)).to.equal(hugeText)
       } finally {
         if (id) await this.client.delete(id)
       }
@@ -216,7 +239,7 @@ describe('jackd', function () {
         const job = await this.client.reserve()
 
         expect(job.id).to.equal(id)
-        expect(job.payload).to.equal(payload)
+        expect(String(job.payload)).to.equal(payload)
       } finally {
         if (id) await this.client.delete(id)
       }
@@ -243,7 +266,7 @@ describe('jackd', function () {
 
 function setupTestSuiteLifecycleWithClient() {
   beforeEach(async function () {
-    this.client = new Jackd({ useLegacyStringPayloads: true })
+    this.client = new Jackd()
     await this.client.connect()
   })
 
