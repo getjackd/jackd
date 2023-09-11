@@ -58,7 +58,7 @@ class JackdClient {
         this.decodeAsciiWhenLegacy = (payload) => this.useLegacyStringPayloads ? payload.toString('ascii') : payload;
         this.reserve = this.createCommandHandler(() => Buffer.from('reserve\r\n', 'ascii'), this.createReserveHandlers());
         this.reserveWithTimeout = this.createCommandHandler(seconds => Buffer.from(`reserve-with-timeout ${seconds}\r\n`, 'ascii'), this.createReserveHandlers());
-        this.reserveJob = this.createCommandHandler(id => Buffer.from(`reserve-job ${id}\r\n`, 'ascii'), this.createReserveHandlers());
+        this.reserveJob = this.createCommandHandler(id => Buffer.from(`reserve-job ${id}\r\n`, 'ascii'), this.createReserveHandlers([NOT_FOUND]));
         this.delete = this.createCommandHandler(id => {
             assert(id);
             return Buffer.from(`delete ${id}\r\n`, 'ascii');
@@ -289,12 +289,16 @@ class JackdClient {
     async quit() {
         this.socket.end(Buffer.from('quit\r\n', 'ascii'));
     }
-    createReserveHandlers() {
+    createReserveHandlers(additionalResponses = []) {
         const self = this;
         let id;
         return [
             async (buffer) => {
-                const ascii = validate(buffer, [DEADLINE_SOON, TIMED_OUT]);
+                const ascii = validate(buffer, [
+                    DEADLINE_SOON,
+                    TIMED_OUT,
+                    ...additionalResponses
+                ]);
                 if (ascii.startsWith(RESERVED)) {
                     const [, incomingId, bytes] = ascii.split(' ');
                     id = incomingId;
@@ -364,10 +368,10 @@ class JackdClient {
 exports.JackdClient = JackdClient;
 module.exports = JackdClient;
 exports.default = JackdClient;
-function validate(buffer, additionalErrors = []) {
+function validate(buffer, additionalResponses = []) {
     const ascii = buffer.toString('ascii');
     const errors = [OUT_OF_MEMORY, INTERNAL_ERROR, BAD_FORMAT, UNKNOWN_COMMAND];
-    if (errors.concat(additionalErrors).some(error => ascii.startsWith(error))) {
+    if (errors.concat(additionalResponses).some(error => ascii.startsWith(error))) {
         throw new Error(ascii);
     }
     return ascii;

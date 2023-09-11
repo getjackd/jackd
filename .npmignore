@@ -1,3 +1,8 @@
 .circleci
 .dockerignore
 docker-compose.yml
+.env.local
+audit
+tmp
+.github
+node_modules
