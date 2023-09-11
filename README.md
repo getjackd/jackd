@@ -1,6 +1,6 @@
 # jackd
 
-[![Build Status](https://img.shields.io/circleci/project/github/getjackd/jackd/master.svg)](https://circleci.com/gh/getjackd/jackd/tree/master)
+![Tests](https://github.com/getjackd/jackd/actions/workflows/test.yml/badge.svg)
 
 ```js
 // Connecting
