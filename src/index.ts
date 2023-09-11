@@ -23,7 +23,13 @@ export class JackdClient {
   connected: Boolean = false
   buffer: Buffer = Buffer.from([])
   chunkLength: number = 0
+
   useLegacyStringPayloads: boolean = false
+
+  connectOpts?: ConnectOpts
+  retries = 0
+  maxRetries: number
+  reconnectionDelay = 1000
 
   // beanstalkd executes all commands serially. Because Node.js is single-threaded,
   // this allows us to queue up all of the messages and commands as they're invokved
@@ -36,12 +42,25 @@ export class JackdClient {
       this.useLegacyStringPayloads = true
     }
 
+    this.maxRetries = opts.maxRetries ?? 10
+
     this.socket.on('ready', () => {
       this.connected = true
     })
 
-    this.socket.on('close', () => {
+    this.socket.on('close', hadError => {
       this.connected = false
+
+      if (!hadError) return
+
+      if (this.retries < this.maxRetries) {
+        let delay = this.reconnectionDelay * Math.pow(2, ++this.retries)
+        setTimeout(() => this.connectSocket().catch(console.error), delay)
+      }
+    })
+
+    process.on('SIGINT', () => {
+      this.socket.destroy()
     })
 
     // When we receive data from the socket, let's process it and put it in our
@@ -137,19 +156,19 @@ export class JackdClient {
     return this.connected
   }
 
-  async connect(opts?: ConnectOpts): Promise<this> {
-    let host: string = undefined
-    let port = 11300
+  async connect({
+    host = '127.0.0.1',
+    port = 11300
+  }: ConnectOpts = {}): Promise<this> {
+    this.connectOpts = { host, port }
+    await this.connectSocket()
+    return this
+  }
 
-    if (opts && opts.host) {
-      host = opts.host
-    }
+  async connectSocket() {
+    const { host, port } = this.connectOpts
 
-    if (opts && opts.port) {
-      port = opts.port
-    }
-
-    await new Promise<void>((resolve, reject) => {
+    return new Promise<void>((resolve, reject) => {
       this.socket.once('error', (error: NodeJS.ErrnoException) => {
         if (error.code === 'EISCONN') {
           return resolve()
@@ -160,8 +179,6 @@ export class JackdClient {
 
       this.socket.connect(port, host, resolve)
     })
-
-    return this
   }
 
   write(buffer: Buffer) {
@@ -570,7 +587,9 @@ function validate(buffer: Buffer, additionalResponses: string[] = []): string {
   const ascii = buffer.toString('ascii')
   const errors = [OUT_OF_MEMORY, INTERNAL_ERROR, BAD_FORMAT, UNKNOWN_COMMAND]
 
-  if (errors.concat(additionalResponses).some(error => ascii.startsWith(error))) {
+  if (
+    errors.concat(additionalResponses).some(error => ascii.startsWith(error))
+  ) {
     throw new Error(ascii)
   }
 

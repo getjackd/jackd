@@ -9,10 +9,11 @@ export class CommandExecution<T> {
 
 export interface CtorOpts {
   useLegacyStringPayloads: boolean
+  maxRetries?: number
 }
 
 export interface ConnectOpts {
-  host: string
+  host?: string
   port?: number
 }
 
