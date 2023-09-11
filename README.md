@@ -1,6 +1,7 @@
 # jackd
 
-![Tests](https://github.com/getjackd/jackd/actions/workflows/test.yml/badge.svg)
+![Tests (Node.js)](https://github.com/getjackd/jackd/actions/workflows/test-nodejs.yml/badge.svg)
+![Tests (Bun)](https://github.com/getjackd/jackd/actions/workflows/test-bun.yml/badge.svg)
 
 ```js
 // Connecting

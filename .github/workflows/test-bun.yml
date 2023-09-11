@@ -1,0 +1,26 @@
+name: Tests (Bun)
+on:
+  push:
+
+jobs:
+  test:
+    concurrency:
+      group: test-bun-${{ github.ref }}
+      cancel-in-progress: true
+
+    runs-on: ubuntu-latest
+    services:
+      beanstalkd:
+        image: ghcr.io/beanstalkd/beanstalkd:latest
+        ports:
+          - 11300:11300
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v1
+        with:
+          bun-version: latest
+
+      - run: bun i
+      - run: bun test
