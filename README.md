@@ -30,7 +30,7 @@ $ npm i jackd
 
 ## Why
 
-Most `beanstalkd` clients don't support promises (fivebeans, nodestalker) and the ones that do have too many dependencies (node-beanstalkd-client). We wanted to make a package that has:
+Most `beanstalkd` clients don't support promises (fivebeans, nodestalker) and the ones that do have too many dependencies (node-beanstalkd-client). I wanted to make a package that has:
 
 - A concise and easy to use API
 - Native promise support
