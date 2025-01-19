@@ -36,7 +36,7 @@ That's where Jackd comes in. Jackd has:
 
 - A concise and easy to use API
 - Native promise support
-- No dependencies
+- A single dependency: `yaml`
 - Protocol accuracy/completeness
 
 These features put Jackd ahead of other Beanstalkd clients.

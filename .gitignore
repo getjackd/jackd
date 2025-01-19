@@ -82,3 +82,5 @@ typings/
 .env.local
 audit
 tmp
+
+changes.diff

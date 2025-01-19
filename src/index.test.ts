@@ -1,5 +1,4 @@
 import Jackd from "."
-import YAML from "yaml"
 import crypto from "crypto"
 
 import { describe, it, expect, beforeEach, afterEach } from "vitest"
@@ -242,7 +241,90 @@ describe("jackd", () => {
 
     it("brings back stats", async () => {
       const stats = await client.stats()
-      YAML.parse(stats)
+      // Verify numeric fields
+      expect(typeof stats.currentJobsReady).toBe("number")
+      expect(typeof stats.totalJobs).toBe("number")
+      expect(typeof stats.currentConnections).toBe("number")
+      expect(typeof stats.pid).toBe("number")
+      expect(typeof stats.uptime).toBe("number")
+      // Verify string fields
+      expect(typeof stats.version).toBe("string")
+      expect(typeof stats.hostname).toBe("string")
+      expect(typeof stats.os).toBe("string")
+      // Verify boolean field
+      expect(typeof stats.draining).toBe("boolean")
+    })
+
+    it("brings back job stats", async () => {
+      let id: number | undefined
+      try {
+        id = await client.put("test job")
+        const stats = await client.statsJob(id)
+        // Verify numeric fields
+        expect(typeof stats.id).toBe("number")
+        expect(stats.id).toBe(id)
+        // Verify string fields
+        expect(typeof stats.tube).toBe("string")
+        expect(stats.tube).toBe("default")
+        expect(typeof stats.state).toBe("string")
+        expect(["ready", "delayed", "reserved", "buried"]).toContain(
+          stats.state
+        )
+        // Verify numeric fields
+        expect(typeof stats.pri).toBe("number")
+        expect(typeof stats.age).toBe("number")
+        expect(typeof stats.delay).toBe("number")
+        expect(typeof stats.ttr).toBe("number")
+        expect(typeof stats.timeLeft).toBe("number")
+        expect(typeof stats.reserves).toBe("number")
+        expect(typeof stats.timeouts).toBe("number")
+        expect(typeof stats.releases).toBe("number")
+        expect(typeof stats.buries).toBe("number")
+        expect(typeof stats.kicks).toBe("number")
+      } finally {
+        if (id !== undefined) await client.delete(id)
+      }
+    })
+
+    it("brings back tube stats", async () => {
+      const stats = await client.statsTube("default")
+      // Verify string field
+      expect(typeof stats.name).toBe("string")
+      expect(stats.name).toBe("default")
+      // Verify numeric fields
+      expect(typeof stats.currentJobsUrgent).toBe("number")
+      expect(typeof stats.currentJobsReady).toBe("number")
+      expect(typeof stats.currentJobsReserved).toBe("number")
+      expect(typeof stats.currentJobsDelayed).toBe("number")
+      expect(typeof stats.currentJobsBuried).toBe("number")
+      expect(typeof stats.totalJobs).toBe("number")
+      expect(typeof stats.currentUsing).toBe("number")
+      expect(typeof stats.currentWaiting).toBe("number")
+      expect(typeof stats.currentWatching).toBe("number")
+      expect(typeof stats.pause).toBe("number")
+      expect(typeof stats.cmdDelete).toBe("number")
+      expect(typeof stats.cmdPauseTube).toBe("number")
+      expect(typeof stats.pauseTimeLeft).toBe("number")
+    })
+
+    it("brings back list of tubes", async () => {
+      const tubes = await client.listTubes()
+      expect(tubes).toContain("default")
+      expect(Array.isArray(tubes)).toBe(true)
+    })
+
+    it("brings back list of watched tubes", async () => {
+      await client.watch("test-tube")
+      const tubes = await client.listTubesWatched()
+      expect(tubes).toContain("default")
+      expect(tubes).toContain("test-tube")
+      expect(Array.isArray(tubes)).toBe(true)
+    })
+
+    it("brings back current tube", async () => {
+      expect(await client.listTubeUsed()).toBe("default")
+      await client.use("test-tube")
+      expect(await client.listTubeUsed()).toBe("test-tube")
     })
   })
 

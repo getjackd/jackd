@@ -1,6 +1,8 @@
 import { Socket } from "net"
 import assert from "assert"
 import EventEmitter from "events"
+import yaml from "yaml"
+import camelCase from "./camelcase"
 
 const DELIMITER = "\r\n"
 
@@ -34,6 +36,94 @@ export interface JackdJob {
   payload: string
 }
 
+export interface JobStats {
+  id: number
+  tube: string
+  state: "ready" | "delayed" | "reserved" | "buried"
+  pri: number
+  age: number
+  delay: number
+  ttr: number
+  timeLeft: number
+  file: number
+  reserves: number
+  timeouts: number
+  releases: number
+  buries: number
+  kicks: number
+}
+
+export interface TubeStats {
+  name: string
+  currentJobsUrgent: number
+  currentJobsReady: number
+  currentJobsReserved: number
+  currentJobsDelayed: number
+  currentJobsBuried: number
+  totalJobs: number
+  currentUsing: number
+  currentWaiting: number
+  currentWatching: number
+  pause: number
+  cmdDelete: number
+  cmdPauseTube: number
+  pauseTimeLeft: number
+}
+
+export interface SystemStats {
+  currentJobsUrgent: number
+  currentJobsReady: number
+  currentJobsReserved: number
+  currentJobsDelayed: number
+  currentJobsBuried: number
+  cmdPut: number
+  cmdPeek: number
+  cmdPeekReady: number
+  cmdPeekDelayed: number
+  cmdPeekBuried: number
+  cmdReserve: number
+  cmdReserveWithTimeout: number
+  cmdTouch: number
+  cmdUse: number
+  cmdWatch: number
+  cmdIgnore: number
+  cmdDelete: number
+  cmdRelease: number
+  cmdBury: number
+  cmdKick: number
+  cmdStats: number
+  cmdStatsJob: number
+  cmdStatsTube: number
+  cmdListTubes: number
+  cmdListTubeUsed: number
+  cmdListTubesWatched: number
+  cmdPauseTube: number
+  jobTimeouts: number
+  totalJobs: number
+  maxJobSize: number
+  currentTubes: number
+  currentConnections: number
+  currentProducers: number
+  currentWorkers: number
+  currentWaiting: number
+  totalConnections: number
+  pid: number
+  version: string
+  rusageUtime: number
+  rusageStime: number
+  uptime: number
+  binlogOldestIndex: number
+  binlogCurrentIndex: number
+  binlogMaxSize: number
+  binlogRecordsWritten: number
+  binlogRecordsMigrated: number
+  draining: boolean
+  id: string
+  hostname: string
+  os: string
+  platform: string
+}
+
 interface JackdReleaseOpts {
   priority?: number
   delay?: number
@@ -61,6 +151,7 @@ type JackdArgs =
   | JackdTubeArgs
   | never[]
   | number[]
+  | string[]
   | [jobId: number, priority?: number]
 
 export class JackdClient {
@@ -86,13 +177,13 @@ export class JackdClient {
 
     // When we receive data from the socket, let's process it and put it in our
     // messages.
-    this.socket.on("data", async incoming => {
+    this.socket.on("data", incoming => {
       // Write the incoming data onto the buffer
       const newBuffer = new Uint8Array(this.buffer.length + incoming.length)
       newBuffer.set(this.buffer)
       newBuffer.set(new Uint8Array(incoming), this.buffer.length)
       this.buffer = newBuffer
-      await this.processChunk(this.buffer)
+      void this.processChunk(this.buffer)
     })
   }
 
@@ -531,32 +622,142 @@ export class JackdClient {
     ]
   )
 
-  statsJob = this.createCommandHandler<JackdJobArgs, string>(id => {
-    assert(id)
-    return new TextEncoder().encode(`stats-job ${id}\r\n`)
-  }, this.createYamlCommandHandlers())
+  statsJob = this.createCommandHandler<JackdJobArgs, JobStats>(
+    id => {
+      assert(id)
+      return new TextEncoder().encode(`stats-job ${id}\r\n`)
+    },
+    [
+      (buffer: Uint8Array) => {
+        const ascii = validate(buffer, [DEADLINE_SOON, TIMED_OUT])
 
-  statsTube = this.createCommandHandler<JackdTubeArgs, string>(tube => {
-    assert(tube)
-    return new TextEncoder().encode(`stats-tube ${tube}\r\n`)
-  }, this.createYamlCommandHandlers())
+        if (ascii.startsWith(OK)) {
+          const [, bytes] = ascii.split(" ")
+          this.chunkLength = parseInt(bytes)
+          return
+        }
 
-  stats = this.createCommandHandler<[], string>(
+        invalidResponse(ascii)
+      },
+      (payload: Uint8Array): JobStats => {
+        const decodedString = new TextDecoder().decode(payload)
+        const rawStats = yaml.parse(decodedString) as Record<string, unknown>
+        const transformedStats = Object.fromEntries(
+          Object.entries(rawStats).map(([key, value]) => [
+            camelCase(key),
+            value
+          ])
+        )
+        return transformedStats as unknown as JobStats
+      }
+    ]
+  )
+
+  statsTube = this.createCommandHandler<JackdTubeArgs, TubeStats>(
+    tube => {
+      assert(tube)
+      return new TextEncoder().encode(`stats-tube ${tube}\r\n`)
+    },
+    [
+      (buffer: Uint8Array) => {
+        const ascii = validate(buffer, [NOT_FOUND, DEADLINE_SOON, TIMED_OUT])
+
+        if (ascii.startsWith(OK)) {
+          const [, bytes] = ascii.split(" ")
+          this.chunkLength = parseInt(bytes)
+          return
+        }
+
+        invalidResponse(ascii)
+      },
+      (payload: Uint8Array): TubeStats => {
+        const decodedString = new TextDecoder().decode(payload)
+        const rawStats = yaml.parse(decodedString) as Record<string, unknown>
+        const transformedStats = Object.fromEntries(
+          Object.entries(rawStats).map(([key, value]) => [
+            camelCase(key),
+            value
+          ])
+        )
+        return transformedStats as unknown as TubeStats
+      }
+    ]
+  )
+
+  stats = this.createCommandHandler<[], SystemStats>(
     () => new TextEncoder().encode(`stats\r\n`),
-    this.createYamlCommandHandlers()
+    [
+      (buffer: Uint8Array) => {
+        const ascii = validate(buffer, [DEADLINE_SOON, TIMED_OUT])
+
+        if (ascii.startsWith(OK)) {
+          const [, bytes] = ascii.split(" ")
+          this.chunkLength = parseInt(bytes)
+          return
+        }
+
+        invalidResponse(ascii)
+      },
+      (payload: Uint8Array): SystemStats => {
+        const decodedString = new TextDecoder().decode(payload)
+        const rawStats = yaml.parse(decodedString) as Record<string, unknown>
+        const transformedStats = Object.fromEntries(
+          Object.entries(rawStats).map(([key, value]) => [
+            camelCase(key),
+            value
+          ])
+        )
+        return transformedStats as unknown as SystemStats
+      }
+    ]
   )
 
-  listTubes = this.createCommandHandler<[], string>(
+  listTubes = this.createCommandHandler<[], string[]>(
     () => new TextEncoder().encode(`list-tubes\r\n`),
-    this.createYamlCommandHandlers()
+    [
+      (buffer: Uint8Array) => {
+        const ascii = validate(buffer, [DEADLINE_SOON, TIMED_OUT])
+
+        if (ascii.startsWith(OK)) {
+          const [, bytes] = ascii.split(" ")
+          this.chunkLength = parseInt(bytes)
+          return
+        }
+
+        invalidResponse(ascii)
+      },
+      (payload: Uint8Array): string[] => {
+        const decodedString = new TextDecoder().decode(payload)
+        return yaml.parse(decodedString) as string[]
+      }
+    ]
   )
 
-  listTubesWatched = this.createCommandHandler<[], string>(
+  listTubesWatched = this.createCommandHandler<[], string[]>(
     () => new TextEncoder().encode(`list-tubes-watched\r\n`),
-    this.createYamlCommandHandlers()
+    [
+      (buffer: Uint8Array) => {
+        const ascii = validate(buffer, [DEADLINE_SOON, TIMED_OUT])
+
+        if (ascii.startsWith(OK)) {
+          const [, bytes] = ascii.split(" ")
+          this.chunkLength = parseInt(bytes)
+          return
+        }
+
+        invalidResponse(ascii)
+      },
+      (payload: Uint8Array): string[] => {
+        const decodedString = new TextDecoder().decode(payload)
+        return yaml.parse(decodedString) as string[]
+      }
+    ]
   )
 
-  createYamlCommandHandlers(): [CommandHandler<void>, CommandHandler<string>] {
+  createYamlCommandHandlers<T = string>(): [
+    CommandHandler<void>,
+    CommandHandler<T>
+  ] {
     return [
       (buffer: Uint8Array) => {
         const ascii = validate(buffer, [DEADLINE_SOON, TIMED_OUT])
@@ -570,13 +771,12 @@ export class JackdClient {
         invalidResponse(ascii)
       },
       (payload: Uint8Array) => {
-        // Payloads for internal beanstalkd commands are always returned in ASCII
-        return new TextDecoder().decode(payload)
+        return new TextDecoder().decode(payload) as T
       }
     ]
   }
 
-  getCurrentTube = this.createCommandHandler<[], string>(
+  listTubeUsed = this.createCommandHandler<[], string>(
     () => new TextEncoder().encode(`list-tube-used\r\n`),
     [
       buffer => {
@@ -589,8 +789,6 @@ export class JackdClient {
       }
     ]
   )
-
-  listTubeUsed = this.getCurrentTube
 
   createCommandHandler<TArgs extends JackdArgs, TReturn>(
     commandStringFunction: (...args: TArgs) => Uint8Array,
