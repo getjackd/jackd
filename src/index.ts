@@ -8,128 +8,254 @@ const DELIMITER = "\r\n"
 
 type JackdPayload = Uint8Array | string | object
 
+/**
+ * Handler for processing command responses
+ */
 export type CommandHandler<T> = (chunk: Uint8Array) => T | Promise<T>
 
+/**
+ * Command execution state
+ */
 export class CommandExecution<T> {
+  /** Handlers for processing command response */
   handlers: CommandHandler<T | void>[] = []
+  /** Event emitter for command completion */
   emitter: EventEmitter = new EventEmitter()
 }
 
+/**
+ * Connection options for beanstalkd server
+ */
 export interface JackdConnectOpts {
+  /** Hostname of beanstalkd server */
   host: string
+  /** Port number, defaults to 11300 */
   port?: number
 }
 
+/**
+ * Options for putting a job into a tube
+ */
 export interface JackdPutOpts {
-  delay?: number
+  /** Priority value between 0 and 2**32. Jobs with smaller priority values will be scheduled before jobs with larger priorities. 0 is most urgent. */
   priority?: number
+  /** Number of seconds to wait before putting the job in the ready queue. Job will be in "delayed" state during this time. Maximum is 2**32-1. */
+  delay?: number
+  /** Time to run - number of seconds to allow a worker to run this job. Minimum is 1. If 0 is provided, server will use 1. Maximum is 2**32-1. */
   ttr?: number
 }
 
+/**
+ * Raw job data returned from reserveRaw
+ */
 export interface JackdJobRaw {
+  /** Unique job ID for this instance of beanstalkd */
   id: number
+  /** Raw job payload as bytes */
   payload: Uint8Array
 }
 
+/**
+ * Job data with decoded string payload
+ */
 export interface JackdJob {
+  /** Unique job ID for this instance of beanstalkd */
   id: number
+  /** Job payload decoded as UTF-8 string */
   payload: string
 }
 
+/**
+ * Stats for a specific job
+ */
 export interface JobStats {
+  /** Job ID */
   id: number
+  /** Name of tube containing this job */
   tube: string
+  /** Current state of the job */
   state: "ready" | "delayed" | "reserved" | "buried"
+  /** Priority value set by put/release/bury */
   pri: number
+  /** Time in seconds since job creation */
   age: number
+  /** Seconds remaining until job is put in ready queue */
   delay: number
+  /** Time to run in seconds */
   ttr: number
+  /** Seconds until server puts job into ready queue (only meaningful if reserved/delayed) */
   timeLeft: number
+  /** Binlog file number containing this job (0 if binlog disabled) */
   file: number
+  /** Number of times job has been reserved */
   reserves: number
+  /** Number of times job has timed out during reservation */
   timeouts: number
+  /** Number of times job has been released */
   releases: number
+  /** Number of times job has been buried */
   buries: number
+  /** Number of times job has been kicked */
   kicks: number
 }
 
+/**
+ * Stats for a specific tube
+ */
 export interface TubeStats {
+  /** Tube name */
   name: string
+  /** Number of ready jobs with priority < 1024 */
   currentJobsUrgent: number
+  /** Number of jobs in ready queue */
   currentJobsReady: number
+  /** Number of jobs reserved by all clients */
   currentJobsReserved: number
+  /** Number of delayed jobs */
   currentJobsDelayed: number
+  /** Number of buried jobs */
   currentJobsBuried: number
+  /** Total jobs created in this tube */
   totalJobs: number
+  /** Number of open connections using this tube */
   currentUsing: number
+  /** Number of connections waiting on reserve */
   currentWaiting: number
+  /** Number of connections watching this tube */
   currentWatching: number
+  /** Seconds tube is paused for */
   pause: number
+  /** Total delete commands for this tube */
   cmdDelete: number
+  /** Total pause-tube commands for this tube */
   cmdPauseTube: number
+  /** Seconds until tube is unpaused */
   pauseTimeLeft: number
 }
 
+/**
+ * System-wide statistics
+ */
 export interface SystemStats {
+  /** Number of ready jobs with priority < 1024 */
   currentJobsUrgent: number
+  /** Number of jobs in ready queue */
   currentJobsReady: number
+  /** Number of jobs reserved by all clients */
   currentJobsReserved: number
+  /** Number of delayed jobs */
   currentJobsDelayed: number
+  /** Number of buried jobs */
   currentJobsBuried: number
+  /** Total put commands */
   cmdPut: number
+  /** Total peek commands */
   cmdPeek: number
+  /** Total peek-ready commands */
   cmdPeekReady: number
+  /** Total peek-delayed commands */
   cmdPeekDelayed: number
+  /** Total peek-buried commands */
   cmdPeekBuried: number
+  /** Total reserve commands */
   cmdReserve: number
+  /** Total reserve-with-timeout commands */
   cmdReserveWithTimeout: number
+  /** Total touch commands */
   cmdTouch: number
+  /** Total use commands */
   cmdUse: number
+  /** Total watch commands */
   cmdWatch: number
+  /** Total ignore commands */
   cmdIgnore: number
+  /** Total delete commands */
   cmdDelete: number
+  /** Total release commands */
   cmdRelease: number
+  /** Total bury commands */
   cmdBury: number
+  /** Total kick commands */
   cmdKick: number
+  /** Total stats commands */
   cmdStats: number
+  /** Total stats-job commands */
   cmdStatsJob: number
+  /** Total stats-tube commands */
   cmdStatsTube: number
+  /** Total list-tubes commands */
   cmdListTubes: number
+  /** Total list-tube-used commands */
   cmdListTubeUsed: number
+  /** Total list-tubes-watched commands */
   cmdListTubesWatched: number
+  /** Total pause-tube commands */
   cmdPauseTube: number
+  /** Total job timeouts */
   jobTimeouts: number
+  /** Total jobs created */
   totalJobs: number
+  /** Maximum job size in bytes */
   maxJobSize: number
+  /** Number of currently existing tubes */
   currentTubes: number
+  /** Number of currently open connections */
   currentConnections: number
+  /** Number of open connections that have issued at least one put */
   currentProducers: number
+  /** Number of open connections that have issued at least one reserve */
   currentWorkers: number
+  /** Number of connections waiting on reserve */
   currentWaiting: number
+  /** Total connections */
   totalConnections: number
+  /** Process ID of server */
   pid: number
+  /** Version string of server */
   version: string
+  /** User CPU time of process */
   rusageUtime: number
+  /** System CPU time of process */
   rusageStime: number
+  /** Seconds since server started */
   uptime: number
+  /** Index of oldest binlog file needed */
   binlogOldestIndex: number
+  /** Index of current binlog file */
   binlogCurrentIndex: number
+  /** Maximum binlog file size */
   binlogMaxSize: number
+  /** Total records written to binlog */
   binlogRecordsWritten: number
+  /** Total records migrated in binlog */
   binlogRecordsMigrated: number
+  /** Whether server is in drain mode */
   draining: boolean
+  /** Random ID of server process */
   id: string
+  /** Server hostname */
   hostname: string
+  /** Server OS version */
   os: string
+  /** Server machine architecture */
   platform: string
 }
 
+/**
+ * Options for releasing a job back to ready queue
+ */
 interface JackdReleaseOpts {
+  /** New priority to assign to job */
   priority?: number
+  /** Seconds to wait before putting job in ready queue */
   delay?: number
 }
 
+/**
+ * Options for pausing a tube
+ */
 interface JackdPauseTubeOpts {
+  /** Seconds to pause the tube for */
   delay?: number
 }
 
@@ -307,6 +433,9 @@ export class JackdClient {
     })
   }
 
+  /**
+   * Closes the connection
+   */
   quit = async () => {
     if (!this.connected) return
 
@@ -322,6 +451,16 @@ export class JackdClient {
   close = this.quit
   disconnect = this.quit
 
+  /**
+   * Puts a job into the currently used tube
+   * @param payload Job data - will be JSON stringified if object
+   * @param options Priority, delay and TTR options
+   * @returns Job ID
+   * @throws {Error} BURIED if server out of memory
+   * @throws {Error} EXPECTED_CRLF if job body not properly terminated
+   * @throws {Error} JOB_TOO_BIG if job larger than max-job-size
+   * @throws {Error} DRAINING if server in drain mode
+   */
   put = this.createCommandHandler<JackdPutArgs, number>(
     (payload: JackdPayload, { priority, delay, ttr }: JackdPutOpts = {}) => {
       assert(payload)
@@ -368,6 +507,11 @@ export class JackdClient {
     ]
   )
 
+  /**
+   * Changes the tube used for subsequent put commands
+   * @param tube Tube name (max 200 bytes). Created if doesn't exist.
+   * @returns Name of tube now being used
+   */
   use = this.createCommandHandler<JackdTubeArgs, string>(
     tube => {
       assert(tube)
@@ -419,26 +563,56 @@ export class JackdClient {
     ]
   }
 
+  /**
+   * Reserves a job from any watched tube
+   * @returns Reserved job with string payload
+   * @throws {Error} DEADLINE_SOON if reserved job TTR expiring
+   * @throws {Error} TIMED_OUT if timeout exceeded with no job
+   */
   reserve = this.createCommandHandler<[], JackdJob>(
     () => new TextEncoder().encode("reserve\r\n"),
     this.createReserveHandlers<JackdJob>([], true)
   )
 
+  /**
+   * Reserves a job with raw byte payload
+   * @returns Reserved job with raw payload
+   * @throws {Error} DEADLINE_SOON if reserved job TTR expiring
+   * @throws {Error} TIMED_OUT if timeout exceeded with no job
+   */
   reserveRaw = this.createCommandHandler<[], JackdJobRaw>(
     () => new TextEncoder().encode("reserve\r\n"),
     this.createReserveHandlers<JackdJobRaw>([], false)
   )
 
+  /**
+   * Reserves a job with timeout
+   * @param seconds Max seconds to wait. 0 returns immediately.
+   * @returns Reserved job
+   * @throws {Error} DEADLINE_SOON if reserved job TTR expiring
+   * @throws {Error} TIMED_OUT if timeout exceeded with no job
+   */
   reserveWithTimeout = this.createCommandHandler<[number], JackdJob>(
     seconds => new TextEncoder().encode(`reserve-with-timeout ${seconds}\r\n`),
     this.createReserveHandlers<JackdJob>([], true)
   )
 
+  /**
+   * Reserves a specific job by ID
+   * @param id Job ID to reserve
+   * @returns Reserved job
+   * @throws {Error} NOT_FOUND if job doesn't exist or not reservable
+   */
   reserveJob = this.createCommandHandler<[number], JackdJob>(
     id => new TextEncoder().encode(`reserve-job ${id}\r\n`),
     this.createReserveHandlers<JackdJob>([NOT_FOUND], true)
   )
 
+  /**
+   * Deletes a job
+   * @param id Job ID to delete
+   * @throws {Error} NOT_FOUND if job doesn't exist or not deletable
+   */
   delete = this.createCommandHandler<JackdJobArgs, void>(
     id => {
       assert(id)
@@ -454,6 +628,13 @@ export class JackdClient {
     ]
   )
 
+  /**
+   * Releases a reserved job back to ready queue
+   * @param id Job ID to release
+   * @param options New priority and delay
+   * @throws {Error} BURIED if server out of memory
+   * @throws {Error} NOT_FOUND if job doesn't exist or not reserved by this client
+   */
   release = this.createCommandHandler<JackdReleaseArgs, void>(
     (id, { priority, delay } = {}) => {
       assert(id)
@@ -470,6 +651,12 @@ export class JackdClient {
     ]
   )
 
+  /**
+   * Buries a job
+   * @param id Job ID to bury
+   * @param priority New priority
+   * @throws {Error} NOT_FOUND if job doesn't exist or not reserved by this client
+   */
   bury = this.createCommandHandler<JackdBuryArgs, void>(
     (id, priority) => {
       assert(id)
@@ -484,6 +671,11 @@ export class JackdClient {
     ]
   )
 
+  /**
+   * Touches a reserved job, requesting more time to work on it
+   * @param id Job ID to touch
+   * @throws {Error} NOT_FOUND if job doesn't exist or not reserved by this client
+   */
   touch = this.createCommandHandler<JackdJobArgs, void>(
     id => {
       assert(id)
@@ -498,6 +690,11 @@ export class JackdClient {
     ]
   )
 
+  /**
+   * Adds tube to watch list for reserve commands
+   * @param tube Tube name to watch (max 200 bytes)
+   * @returns Number of tubes now being watched
+   */
   watch = this.createCommandHandler<JackdTubeArgs, number>(
     tube => {
       assert(tube)
@@ -517,6 +714,12 @@ export class JackdClient {
     ]
   )
 
+  /**
+   * Removes tube from watch list
+   * @param tube Tube name to ignore
+   * @returns Number of tubes now being watched
+   * @throws {Error} NOT_IGNORED if trying to ignore only watched tube
+   */
   ignore = this.createCommandHandler<JackdTubeArgs, number>(
     tube => {
       assert(tube)
@@ -535,6 +738,12 @@ export class JackdClient {
     ]
   )
 
+  /**
+   * Pauses new job reservations in a tube
+   * @param tube Tube name to pause
+   * @param delay Seconds to pause for
+   * @throws {Error} NOT_FOUND if tube doesn't exist
+   */
   pauseTube = this.createCommandHandler<JackdPauseTubeArgs, void>(
     (tube, { delay } = {}) =>
       new TextEncoder().encode(`pause-tube ${tube} ${delay || 0}`),
@@ -550,6 +759,12 @@ export class JackdClient {
 
   /* Other commands */
 
+  /**
+   * Peeks at a specific job
+   * @param id Job ID to peek at
+   * @returns Job data if found
+   * @throws {Error} NOT_FOUND if job doesn't exist
+   */
   peek = this.createCommandHandler<JackdJobArgs, JackdJob>(id => {
     assert(id)
     return new TextEncoder().encode(`peek ${id}\r\n`)
@@ -578,18 +793,41 @@ export class JackdClient {
     ]
   }
 
-  peekReady = this.createCommandHandler<[], JackdJob>(() => {
-    return new TextEncoder().encode(`peek-ready\r\n`)
-  }, this.createPeekHandlers())
+  /**
+   * Peeks at the next ready job in the currently used tube
+   * @returns Job data if found
+   * @throws {Error} NOT_FOUND if no ready jobs
+   */
+  peekReady = this.createCommandHandler<[], JackdJob>(
+    () => new TextEncoder().encode(`peek-ready\r\n`),
+    this.createPeekHandlers()
+  )
 
-  peekDelayed = this.createCommandHandler<[], JackdJob>(() => {
-    return new TextEncoder().encode(`peek-delayed\r\n`)
-  }, this.createPeekHandlers())
+  /**
+   * Peeks at the delayed job with shortest delay in currently used tube
+   * @returns Job data if found
+   * @throws {Error} NOT_FOUND if no delayed jobs
+   */
+  peekDelayed = this.createCommandHandler<[], JackdJob>(
+    () => new TextEncoder().encode(`peek-delayed\r\n`),
+    this.createPeekHandlers()
+  )
 
-  peekBuried = this.createCommandHandler<[], JackdJob>(() => {
-    return new TextEncoder().encode(`peek-buried\r\n`)
-  }, this.createPeekHandlers())
+  /**
+   * Peeks at the next buried job in currently used tube
+   * @returns Job data if found
+   * @throws {Error} NOT_FOUND if no buried jobs
+   */
+  peekBuried = this.createCommandHandler<[], JackdJob>(
+    () => new TextEncoder().encode(`peek-buried\r\n`),
+    this.createPeekHandlers()
+  )
 
+  /**
+   * Kicks at most bound jobs from buried to ready queue in currently used tube
+   * @param bound Maximum number of jobs to kick
+   * @returns Number of jobs actually kicked
+   */
   kick = this.createCommandHandler<[jobsCount: number], number>(
     bound => {
       assert(bound)
@@ -608,6 +846,11 @@ export class JackdClient {
     ]
   )
 
+  /**
+   * Kicks a specific buried or delayed job into ready queue
+   * @param id Job ID to kick
+   * @throws {Error} NOT_FOUND if job doesn't exist or not in kickable state
+   */
   kickJob = this.createCommandHandler<JackdJobArgs, void>(
     id => {
       assert(id)
@@ -622,6 +865,12 @@ export class JackdClient {
     ]
   )
 
+  /**
+   * Gets statistical information about a job
+   * @param id Job ID
+   * @returns Job statistics
+   * @throws {Error} NOT_FOUND if job doesn't exist
+   */
   statsJob = this.createCommandHandler<JackdJobArgs, JobStats>(
     id => {
       assert(id)
@@ -653,6 +902,12 @@ export class JackdClient {
     ]
   )
 
+  /**
+   * Gets statistical information about a tube
+   * @param tube Tube name
+   * @returns Tube statistics
+   * @throws {Error} NOT_FOUND if tube doesn't exist
+   */
   statsTube = this.createCommandHandler<JackdTubeArgs, TubeStats>(
     tube => {
       assert(tube)
@@ -684,6 +939,10 @@ export class JackdClient {
     ]
   )
 
+  /**
+   * Gets statistical information about the system
+   * @returns System statistics
+   */
   stats = this.createCommandHandler<[], SystemStats>(
     () => new TextEncoder().encode(`stats\r\n`),
     [
@@ -712,6 +971,10 @@ export class JackdClient {
     ]
   )
 
+  /**
+   * Lists all existing tubes
+   * @returns Array of tube names
+   */
   listTubes = this.createCommandHandler<[], string[]>(
     () => new TextEncoder().encode(`list-tubes\r\n`),
     [
@@ -733,6 +996,10 @@ export class JackdClient {
     ]
   )
 
+  /**
+   * Lists tubes being watched by current connection
+   * @returns Array of watched tube names
+   */
   listTubesWatched = this.createCommandHandler<[], string[]>(
     () => new TextEncoder().encode(`list-tubes-watched\r\n`),
     [
@@ -754,28 +1021,10 @@ export class JackdClient {
     ]
   )
 
-  createYamlCommandHandlers<T = string>(): [
-    CommandHandler<void>,
-    CommandHandler<T>
-  ] {
-    return [
-      (buffer: Uint8Array) => {
-        const ascii = validate(buffer, [DEADLINE_SOON, TIMED_OUT])
-
-        if (ascii.startsWith(OK)) {
-          const [, bytes] = ascii.split(" ")
-          this.chunkLength = parseInt(bytes)
-          return
-        }
-
-        invalidResponse(ascii)
-      },
-      (payload: Uint8Array) => {
-        return new TextDecoder().decode(payload) as T
-      }
-    ]
-  }
-
+  /**
+   * Returns the tube currently being used by client
+   * @returns Name of tube being used
+   */
   listTubeUsed = this.createCommandHandler<[], string>(
     () => new TextEncoder().encode(`list-tube-used\r\n`),
     [

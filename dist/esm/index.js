@@ -7411,7 +7411,9 @@ function camelCase(input, options) {
 // src/index.ts
 var DELIMITER = "\r\n";
 var CommandExecution = class {
+  /** Handlers for processing command response */
   handlers = [];
+  /** Event emitter for command completion */
   emitter = new EventEmitter();
 };
 var JackdClient = class {
@@ -7518,6 +7520,9 @@ var JackdClient = class {
       this.socket.write(buffer, (err) => err ? reject(err) : resolve());
     });
   }
+  /**
+   * Closes the connection
+   */
   quit = async () => {
     if (!this.connected) return;
     const waitForClose = new Promise((resolve, reject) => {
@@ -7529,6 +7534,16 @@ var JackdClient = class {
   };
   close = this.quit;
   disconnect = this.quit;
+  /**
+   * Puts a job into the currently used tube
+   * @param payload Job data - will be JSON stringified if object
+   * @param options Priority, delay and TTR options
+   * @returns Job ID
+   * @throws {Error} BURIED if server out of memory
+   * @throws {Error} EXPECTED_CRLF if job body not properly terminated
+   * @throws {Error} JOB_TOO_BIG if job larger than max-job-size
+   * @throws {Error} DRAINING if server in drain mode
+   */
   put = this.createCommandHandler(
     (payload, { priority, delay, ttr } = {}) => {
       assert(payload);
@@ -7568,6 +7583,11 @@ var JackdClient = class {
       }
     ]
   );
+  /**
+   * Changes the tube used for subsequent put commands
+   * @param tube Tube name (max 200 bytes). Created if doesn't exist.
+   * @returns Name of tube now being used
+   */
   use = this.createCommandHandler(
     (tube) => {
       assert(tube);
@@ -7610,24 +7630,54 @@ var JackdClient = class {
       }
     ];
   }
+  /**
+   * Reserves a job from any watched tube
+   * @returns Reserved job with string payload
+   * @throws {Error} DEADLINE_SOON if reserved job TTR expiring
+   * @throws {Error} TIMED_OUT if timeout exceeded with no job
+   */
   reserve = this.createCommandHandler(
     () => new TextEncoder().encode("reserve\r\n"),
     this.createReserveHandlers([], true)
   );
+  /**
+   * Reserves a job with raw byte payload
+   * @returns Reserved job with raw payload
+   * @throws {Error} DEADLINE_SOON if reserved job TTR expiring
+   * @throws {Error} TIMED_OUT if timeout exceeded with no job
+   */
   reserveRaw = this.createCommandHandler(
     () => new TextEncoder().encode("reserve\r\n"),
     this.createReserveHandlers([], false)
   );
+  /**
+   * Reserves a job with timeout
+   * @param seconds Max seconds to wait. 0 returns immediately.
+   * @returns Reserved job
+   * @throws {Error} DEADLINE_SOON if reserved job TTR expiring
+   * @throws {Error} TIMED_OUT if timeout exceeded with no job
+   */
   reserveWithTimeout = this.createCommandHandler(
     (seconds) => new TextEncoder().encode(`reserve-with-timeout ${seconds}\r
 `),
     this.createReserveHandlers([], true)
   );
+  /**
+   * Reserves a specific job by ID
+   * @param id Job ID to reserve
+   * @returns Reserved job
+   * @throws {Error} NOT_FOUND if job doesn't exist or not reservable
+   */
   reserveJob = this.createCommandHandler(
     (id) => new TextEncoder().encode(`reserve-job ${id}\r
 `),
     this.createReserveHandlers([NOT_FOUND], true)
   );
+  /**
+   * Deletes a job
+   * @param id Job ID to delete
+   * @throws {Error} NOT_FOUND if job doesn't exist or not deletable
+   */
   delete = this.createCommandHandler(
     (id) => {
       assert(id);
@@ -7642,6 +7692,13 @@ var JackdClient = class {
       }
     ]
   );
+  /**
+   * Releases a reserved job back to ready queue
+   * @param id Job ID to release
+   * @param options New priority and delay
+   * @throws {Error} BURIED if server out of memory
+   * @throws {Error} NOT_FOUND if job doesn't exist or not reserved by this client
+   */
   release = this.createCommandHandler(
     (id, { priority, delay } = {}) => {
       assert(id);
@@ -7658,6 +7715,12 @@ var JackdClient = class {
       }
     ]
   );
+  /**
+   * Buries a job
+   * @param id Job ID to bury
+   * @param priority New priority
+   * @throws {Error} NOT_FOUND if job doesn't exist or not reserved by this client
+   */
   bury = this.createCommandHandler(
     (id, priority) => {
       assert(id);
@@ -7672,6 +7735,11 @@ var JackdClient = class {
       }
     ]
   );
+  /**
+   * Touches a reserved job, requesting more time to work on it
+   * @param id Job ID to touch
+   * @throws {Error} NOT_FOUND if job doesn't exist or not reserved by this client
+   */
   touch = this.createCommandHandler(
     (id) => {
       assert(id);
@@ -7686,6 +7754,11 @@ var JackdClient = class {
       }
     ]
   );
+  /**
+   * Adds tube to watch list for reserve commands
+   * @param tube Tube name to watch (max 200 bytes)
+   * @returns Number of tubes now being watched
+   */
   watch = this.createCommandHandler(
     (tube) => {
       assert(tube);
@@ -7703,6 +7776,12 @@ var JackdClient = class {
       }
     ]
   );
+  /**
+   * Removes tube from watch list
+   * @param tube Tube name to ignore
+   * @returns Number of tubes now being watched
+   * @throws {Error} NOT_IGNORED if trying to ignore only watched tube
+   */
   ignore = this.createCommandHandler(
     (tube) => {
       assert(tube);
@@ -7720,6 +7799,12 @@ var JackdClient = class {
       }
     ]
   );
+  /**
+   * Pauses new job reservations in a tube
+   * @param tube Tube name to pause
+   * @param delay Seconds to pause for
+   * @throws {Error} NOT_FOUND if tube doesn't exist
+   */
   pauseTube = this.createCommandHandler(
     (tube, { delay } = {}) => new TextEncoder().encode(`pause-tube ${tube} ${delay || 0}`),
     [
@@ -7731,6 +7816,12 @@ var JackdClient = class {
     ]
   );
   /* Other commands */
+  /**
+   * Peeks at a specific job
+   * @param id Job ID to peek at
+   * @returns Job data if found
+   * @throws {Error} NOT_FOUND if job doesn't exist
+   */
   peek = this.createCommandHandler((id) => {
     assert(id);
     return new TextEncoder().encode(`peek ${id}\r
@@ -7757,18 +7848,41 @@ var JackdClient = class {
       }
     ];
   }
-  peekReady = this.createCommandHandler(() => {
-    return new TextEncoder().encode(`peek-ready\r
-`);
-  }, this.createPeekHandlers());
-  peekDelayed = this.createCommandHandler(() => {
-    return new TextEncoder().encode(`peek-delayed\r
-`);
-  }, this.createPeekHandlers());
-  peekBuried = this.createCommandHandler(() => {
-    return new TextEncoder().encode(`peek-buried\r
-`);
-  }, this.createPeekHandlers());
+  /**
+   * Peeks at the next ready job in the currently used tube
+   * @returns Job data if found
+   * @throws {Error} NOT_FOUND if no ready jobs
+   */
+  peekReady = this.createCommandHandler(
+    () => new TextEncoder().encode(`peek-ready\r
+`),
+    this.createPeekHandlers()
+  );
+  /**
+   * Peeks at the delayed job with shortest delay in currently used tube
+   * @returns Job data if found
+   * @throws {Error} NOT_FOUND if no delayed jobs
+   */
+  peekDelayed = this.createCommandHandler(
+    () => new TextEncoder().encode(`peek-delayed\r
+`),
+    this.createPeekHandlers()
+  );
+  /**
+   * Peeks at the next buried job in currently used tube
+   * @returns Job data if found
+   * @throws {Error} NOT_FOUND if no buried jobs
+   */
+  peekBuried = this.createCommandHandler(
+    () => new TextEncoder().encode(`peek-buried\r
+`),
+    this.createPeekHandlers()
+  );
+  /**
+   * Kicks at most bound jobs from buried to ready queue in currently used tube
+   * @param bound Maximum number of jobs to kick
+   * @returns Number of jobs actually kicked
+   */
   kick = this.createCommandHandler(
     (bound) => {
       assert(bound);
@@ -7786,6 +7900,11 @@ var JackdClient = class {
       }
     ]
   );
+  /**
+   * Kicks a specific buried or delayed job into ready queue
+   * @param id Job ID to kick
+   * @throws {Error} NOT_FOUND if job doesn't exist or not in kickable state
+   */
   kickJob = this.createCommandHandler(
     (id) => {
       assert(id);
@@ -7800,6 +7919,12 @@ var JackdClient = class {
       }
     ]
   );
+  /**
+   * Gets statistical information about a job
+   * @param id Job ID
+   * @returns Job statistics
+   * @throws {Error} NOT_FOUND if job doesn't exist
+   */
   statsJob = this.createCommandHandler(
     (id) => {
       assert(id);
@@ -7829,6 +7954,12 @@ var JackdClient = class {
       }
     ]
   );
+  /**
+   * Gets statistical information about a tube
+   * @param tube Tube name
+   * @returns Tube statistics
+   * @throws {Error} NOT_FOUND if tube doesn't exist
+   */
   statsTube = this.createCommandHandler(
     (tube) => {
       assert(tube);
@@ -7858,6 +7989,10 @@ var JackdClient = class {
       }
     ]
   );
+  /**
+   * Gets statistical information about the system
+   * @returns System statistics
+   */
   stats = this.createCommandHandler(
     () => new TextEncoder().encode(`stats\r
 `),
@@ -7884,6 +8019,10 @@ var JackdClient = class {
       }
     ]
   );
+  /**
+   * Lists all existing tubes
+   * @returns Array of tube names
+   */
   listTubes = this.createCommandHandler(
     () => new TextEncoder().encode(`list-tubes\r
 `),
@@ -7903,6 +8042,10 @@ var JackdClient = class {
       }
     ]
   );
+  /**
+   * Lists tubes being watched by current connection
+   * @returns Array of watched tube names
+   */
   listTubesWatched = this.createCommandHandler(
     () => new TextEncoder().encode(`list-tubes-watched\r
 `),
@@ -7922,22 +8065,10 @@ var JackdClient = class {
       }
     ]
   );
-  createYamlCommandHandlers() {
-    return [
-      (buffer) => {
-        const ascii = validate(buffer, [DEADLINE_SOON, TIMED_OUT]);
-        if (ascii.startsWith(OK)) {
-          const [, bytes] = ascii.split(" ");
-          this.chunkLength = parseInt(bytes);
-          return;
-        }
-        invalidResponse(ascii);
-      },
-      (payload) => {
-        return new TextDecoder().decode(payload);
-      }
-    ];
-  }
+  /**
+   * Returns the tube currently being used by client
+   * @returns Name of tube being used
+   */
   listTubeUsed = this.createCommandHandler(
     () => new TextEncoder().encode(`list-tube-used\r
 `),
