@@ -2,10 +2,9 @@ name: Tests
 on:
   push:
 
-    
 jobs:
   test:
-    concurrency: 
+    concurrency:
       group: test-${{ github.ref }}
       cancel-in-progress: true
     runs-on: ubuntu-latest
@@ -15,16 +14,11 @@ jobs:
         ports:
           - 11300:11300
     steps:
-    - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-    - uses: pnpm/action-setup@v2
-      with:
-        version: 8.7.1
+      - uses: oven-sh/setup-bun@v1
+        with:
+          bun-version: latest
 
-    - uses: actions/setup-node@v3
-      with:
-        node-version: 18.12.1
-        cache: "pnpm"
-
-    - run: pnpm i
-    - run: pnpm test
+      - run: bun install
+      - run: bun test
